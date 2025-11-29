@@ -158,4 +158,3 @@ python-decouple==3.8
 sqlparse==0.4.4
 typing_extensions==4.7.1
 ```
-# joke-engine
