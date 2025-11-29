@@ -43,8 +43,33 @@
                         </div>
                     </div>
                     <p id="jokeText" class="lead mt-3">{{ response }}</p>
+                    {% if joke_id %}
+                        <div class="mt-2">
+                            <button class="btn btn-sm btn-outline-info" onclick="generateMeme({{ joke_id }})">Generate Meme</button>
+                        </div>
+                        <div id="meme-result" class="mt-2"></div>
+                    {% endif %}
                 </div>
             {% endif %}
+            <!-- Quick heckle form: submit your own joke for rating/roast -->
+            <div class="mt-4 p-3 bg-white border rounded shadow-sm">
+                <h5>Reverse Heckler — Tell the AI your joke</h5>
+                <form action="/" method="post">
+                    {% csrf_token %}
+                    <div class="mb-2">
+                        <textarea name="heckle_joke" class="form-control" rows="2" placeholder="Type your joke here..."></textarea>
+                    </div>
+                    <button class="btn btn-sm btn-danger" type="submit">Rate & Roast</button>
+                </form>
+                {% if heckle_result %}
+                    <div class="mt-3">
+                        <h6>Your joke</h6>
+                        <p>{{ heckle_input }}</p>
+                        <h6>AI's Rating & Roast</h6>
+                        <p>{{ heckle_result }}</p>
+                    </div>
+                {% endif %}
+            </div>
             <a href="{% url 'giggle_history' %}" class="history-link">
                 <small>See history</small>
             </a>
@@ -71,6 +96,25 @@
             }, function(err) {
                 console.error('Could not copy text: ', err);
             });
+        }
+    </script>
+    <script>
+        async function generateMeme(id) {
+            const target = document.getElementById('meme-result');
+            if (!target) return;
+            target.innerText = 'Generating image...';
+            try {
+                const res = await fetch(`/meme/${id}/`);
+                if (!res.ok) throw new Error('Image generation failed');
+                const data = await res.json();
+                if (data.image_url) {
+                    target.innerHTML = `<img src="${data.image_url}" alt="meme" style="max-width: 100%; height: auto; border-radius:8px;"/>`;
+                } else {
+                    target.innerText = 'No image generated.';
+                }
+            } catch (e) {
+                target.innerText = 'Error generating image.';
+            }
         }
     </script>
 

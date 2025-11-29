@@ -6,12 +6,20 @@
         <div class="history">
             {% if jokes %}
                 {% for joke in jokes %} 
-                <div class="joke">
-                    <h3>{{ joke.query }}</h3>
-                    <a href="{% url 'delete_joke' pk=joke.id %}">
-                        <span class="material-icons trash-icon">delete</span>
-                    </a>
+                <div class="joke joke-card p-3 bg-white border rounded shadow-sm mb-3">
+                    <div class="d-flex justify-content-between">
+                        <h3>{{ joke.query }}</h3>
+                        <a href="{% url 'delete_joke' pk=joke.id %}">
+                            <span class="material-icons trash-icon">delete</span>
+                        </a>
+                    </div>
                     <p>{{ joke.response }}</p>
+                    <div>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="explain({{ joke.id }}, this)">I don't get it</button>
+                        <button class="btn btn-sm btn-outline-info" onclick="generateMeme({{ joke.id }}, this)">Generate Meme</button>
+                    </div>
+                    <div class="mt-2" id="explain-{{ joke.id }}"></div>
+                    <div class="mt-2" id="meme-{{ joke.id }}"></div>
                 </div>
                 {% endfor %}
             {% endif %}
@@ -41,4 +49,37 @@
         </div>
     </main>
 
+{% endblock %}
+
+{% block scripts %}
+<script>
+    async function explain(id, btn) {
+        const target = document.getElementById('explain-' + id);
+        target.innerText = 'Thinking...';
+        try {
+            const res = await fetch(`/explain/${id}/`);
+            const data = await res.json();
+            target.innerText = data.explanation || 'No explanation available.';
+        } catch (e) {
+            target.innerText = 'Error fetching explanation.';
+        }
+    }
+
+    async function generateMeme(id, btn) {
+        const target = document.getElementById('meme-' + id);
+        target.innerText = 'Generating image...';
+        try {
+            const res = await fetch(`/meme/${id}/`);
+            if (!res.ok) throw new Error('Image generation failed');
+            const data = await res.json();
+            if (data.image_url) {
+                target.innerHTML = `<img src="${data.image_url}" alt="meme" style="max-width: 100%; height: auto; border-radius:8px;"/>`;
+            } else {
+                target.innerText = 'No image generated.';
+            }
+        } catch (e) {
+            target.innerText = 'Error generating image.';
+        }
+    }
+</script>
 {% endblock %}

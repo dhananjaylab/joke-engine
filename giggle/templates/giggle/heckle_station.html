@@ -1,0 +1,28 @@
+{% extends "./base.html" %}
+
+{% block content %}
+
+<main>
+    <h2>Heckle Station</h2>
+    <p>Tell the AI your joke and get rated and roasted.</p>
+
+    <form action="" method="post">
+        {% csrf_token %}
+        <div class="mb-3">
+            <textarea name="user_joke" class="form-control" rows="3" placeholder="Type your joke here...">{{ user_joke|default:'' }}</textarea>
+        </div>
+        <button class="btn btn-primary" type="submit">Submit for Heckling</button>
+    </form>
+
+    {% if heckle %}
+        <div class="mt-4 p-3 bg-white border rounded">
+            <h4>Your Joke</h4>
+            <p>{{ user_joke }}</p>
+            <h4>Roast</h4>
+            <p>{{ heckle }}</p>
+        </div>
+    {% endif %}
+
+</main>
+
+{% endblock %}

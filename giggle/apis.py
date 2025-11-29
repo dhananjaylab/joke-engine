@@ -48,6 +48,69 @@ def get_giggle_result(query, style="witty"):
     except openai.error.RateLimitError as e:
         print(f"OpenAI RateLimitError: {e}")
         return 1
+
+
+def generate_meme_image(joke_text):
+    """Generate a cartoonish meme image URL for the provided joke text.
+
+    Returns an image URL or None on failure.
+    """
+    try:
+        # Prompt should avoid including text in the image; we want illustration only
+        prompt = f"A funny, cartoonish digital art depiction of: {joke_text}. No text in the image. Bright colors, simple characters."
+        response = openai.Image.create(
+            prompt=prompt,
+            n=1,
+            size="512x512"
+        )
+        return response['data'][0].get('url')
+    except Exception as e:
+        print(f"Image generation failed: {e}")
+        return None
+
+
+def heckle_evaluation(user_joke):
+    """Rate and roast the user's joke. Returns the assistant's reply."""
+    system = (
+        "You are a grumpy comedy club owner. The user will tell you a joke. Rate it out of 10, then roast the user in a funny but not abusive way."
+    )
+    try:
+        result = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            n=1,
+            temperature=0.8,
+            max_tokens=200,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": f"User joke: {user_joke}"},
+            ],
+        )
+        return result.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"Heckle failed: {e}")
+        return "Sorry, I'm having trouble heckling right now."
+
+
+def explain_joke_text(joke_text):
+    """Return a dry, over-analytical explanation of why a joke is (or isn't) funny."""
+    system = (
+        "Explain the humor in the following joke in a strictly scientific, dry, and over-analytical tone. Be precise and literal."
+    )
+    try:
+        result = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            n=1,
+            temperature=0.2,
+            max_tokens=250,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": f"Joke: {joke_text}"},
+            ],
+        )
+        return result.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"Explain failed: {e}")
+        return "I couldn't generate an explanation right now."
     except Exception as e:
         print(f"OpenAI Error: {e}")
         return 1
