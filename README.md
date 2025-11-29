@@ -13,6 +13,16 @@
 *   **Management:** Delete old jokes from the history.
 *   **Responsive UI:** Clean interface built with Bootstrap 5.
 
+**New Features Added / Planned**
+
+- **Comedian Persona:** Choose a style (`witty`, `dad`, `sarcastic`, `roast`, `haiku`) from the search form. The backend adjusts the system prompt to match the persona.
+- **Smart Caching by Style:** Results are cached using a composite query key (e.g., `Cats [dad]`) so different styles are stored separately.
+- **Regenerate / Remix:** A "Regenerate" button forces a fresh API call, bypassing the local cache when you want a new variation.
+- **Live Mic (TTS):** A small "Listen" button uses the browser Web Speech API to read jokes aloud.
+- **Copy to Clipboard:** Quickly copy jokes to share with one click.
+
+See the `giggle/` templates and views for usage details. Run `python manage.py makemigrations` and `python manage.py migrate` after pulling changes if you updated the models.
+
 ## 🛠️ Tech Stack
 
 *   **Backend:** Python, Django 4.x

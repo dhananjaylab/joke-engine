@@ -7,32 +7,44 @@ from .models import Joke
 
 def giggle_search(request):
     context = {}
+    # default style for rendering the form
+    context['style'] = 'witty'
     if request.method == 'POST':
-        query = request.POST.get('query')
+        query_text = request.POST.get('query')
+        style = request.POST.get('style', 'witty')
+        regenerate = request.POST.get('regenerate', None)
 
-        # 1. Input Validation
-        if not query or len(query.strip()) == 0 or len(query) > 50:
-            messages.error(request, 'Query must be between 1 and 50 characters.')
+        # Input Validation
+        if not query_text or len(query_text.strip()) == 0 or len(query_text) > 100:
+            messages.error(request, 'Query must be between 1 and 100 characters.')
             return redirect('giggle_search')
 
-        # 2. Check Database First (Cache Layer)
-        existing_joke = Joke.objects.filter(query__iexact=query).first()
+        # Composite key to separate same topic but different styles
+        composite_query = f"{query_text.strip()} [{style}]"
+
+        # Check cache unless user explicitly asked to regenerate
+        existing_joke = None if regenerate else Joke.objects.filter(query__iexact=composite_query).first()
 
         if existing_joke:
             context['query'] = existing_joke.query
             context['response'] = existing_joke.response
+            # also expose original topic and style for template actions
+            context['topic'] = query_text.strip()
+            context['style'] = style
             messages.success(request, 'Joke retrieved from history!')
         else:
-            # 3. Call API if not in DB
-            response = get_giggle_result(query)
+            # Call API
+            response = get_giggle_result(query_text.strip(), style)
 
             if response == 1:
                 messages.error(request, 'Rate limit reached or API error. Try again later.')
             else:
-                context['query'] = query.capitalize()
+                context['query'] = composite_query
                 context['response'] = response
-                # Save new joke
-                Joke.objects.create(query=query, response=response)
+                context['topic'] = query_text.strip()
+                context['style'] = style
+                # Save new joke (cache)
+                Joke.objects.create(query=composite_query, response=response)
 
     return render(request, './giggle/giggle_search.html', context)
 
