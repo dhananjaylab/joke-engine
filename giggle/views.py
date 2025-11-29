@@ -9,16 +9,30 @@ def giggle_search(request):
     context = {}
     if request.method == 'POST':
         query = request.POST.get('query')
-        if len(query) > 50:
+
+        # 1. Input Validation
+        if not query or len(query.strip()) == 0 or len(query) > 50:
+            messages.error(request, 'Query must be between 1 and 50 characters.')
             return redirect('giggle_search')
-        response = get_giggle_result(query)
-        if response == 1:
-            messages.error(request, 'You have hit the rate limit of 3 requests per minute, please try again in a moment.')
-            return render(request, './giggle/giggle_search.html', context)
-        context['query'] = query.capitalize()
-        context['response'] = response
-        new_joke_object = Joke(query=query, response=response)
-        new_joke_object.save()
+
+        # 2. Check Database First (Cache Layer)
+        existing_joke = Joke.objects.filter(query__iexact=query).first()
+
+        if existing_joke:
+            context['query'] = existing_joke.query
+            context['response'] = existing_joke.response
+            messages.success(request, 'Joke retrieved from history!')
+        else:
+            # 3. Call API if not in DB
+            response = get_giggle_result(query)
+
+            if response == 1:
+                messages.error(request, 'Rate limit reached or API error. Try again later.')
+            else:
+                context['query'] = query.capitalize()
+                context['response'] = response
+                # Save new joke
+                Joke.objects.create(query=query, response=response)
 
     return render(request, './giggle/giggle_search.html', context)
 
