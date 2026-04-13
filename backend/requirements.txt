@@ -1,0 +1,37 @@
+# Core
+fastapi>=0.111.0
+uvicorn[standard]>=0.30.0
+python-multipart>=0.0.9
+
+# DB
+sqlalchemy>=2.0.0
+alembic>=1.13.0
+aiosqlite>=0.20.0          # SQLite async (dev)
+asyncpg>=0.29.0            # PostgreSQL async (prod)
+
+# Config + validation
+pydantic>=2.7.0
+pydantic-settings>=2.3.0
+
+# AI
+openai>=1.30.0
+
+# Image
+Pillow>=10.3.0
+aiofiles>=23.2.0
+
+# Session signing
+itsdangerous>=2.2.0
+
+# Background tasks
+arq>=0.25.0
+apscheduler>=3.10.0
+
+# Caching / queuing
+redis>=5.0.0
+
+# Trends
+newsapi-python>=0.2.7
+
+# Prod
+gunicorn>=22.0.0
