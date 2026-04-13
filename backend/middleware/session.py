@@ -1,33 +1,36 @@
 import uuid
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from itsdangerous import TimestampSigner, BadSignature
+from itsdangerous import URLSafeSerializer
+
+COOKIE_NAME = "giggle_session"
+
 
 class SessionMiddleware(BaseHTTPMiddleware):
     def __init__(self, app, secret_key: str):
         super().__init__(app)
-        self.signer = TimestampSigner(secret_key)
+        self.signer = URLSafeSerializer(secret_key, salt="giggle-session")
 
     async def dispatch(self, request: Request, call_next):
-        # Extremely simple cookie-based session ID
-        session_id = request.cookies.get("session_id")
-        
-        if session_id:
-            try:
-                # Basic validation (could be more robust)
-                unsigned = self.signer.unsign(session_id, max_age=3600*24*30).decode()
-                request.state.session_id = unsigned
-            except BadSignature:
-                session_id = None
+        raw = request.cookies.get(COOKIE_NAME)
+        try:
+            session_id: str = self.signer.loads(raw) if raw else None
+        except Exception:
+            session_id = None
 
         if not session_id:
-            new_id = str(uuid.uuid4())
-            request.state.session_id = new_id
-            session_id = self.signer.sign(new_id).decode()
+            session_id = str(uuid.uuid4())
 
-        # Attach session dict to request (Starlette style)
-        request.scope["session"] = {"session_id": request.state.session_id}
-        
+        request.state.session_id = session_id
         response = await call_next(request)
-        response.set_cookie("session_id", session_id, httponly=True, samesite="lax")
+
+        # Re-set cookie with fresh signed value
+        signed = self.signer.dumps(session_id)
+        response.set_cookie(
+            COOKIE_NAME, signed,
+            httponly=True,
+            samesite="lax",
+            secure=False,           # set True in production (HTTPS)
+            max_age=60 * 60 * 24 * 365,
+        )
         return response

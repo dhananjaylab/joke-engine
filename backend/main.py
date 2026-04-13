@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 
 from core.config import get_settings
 from core.database import engine, Base
-from routers import jokes, share, gamify, battle, challenge, ws
+from routers import jokes, share, gamify, battle, challenge, ws, heckle
 from middleware.session import SessionMiddleware
 
 settings = get_settings()
@@ -18,6 +18,7 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     os.makedirs(settings.media_dir, exist_ok=True)
+    os.makedirs(os.path.join(settings.media_dir, "audio"), exist_ok=True)
 
     # Start APScheduler for weekly challenge
     from tasks.scheduler import scheduler
@@ -58,6 +59,7 @@ app.include_router(gamify.router)
 app.include_router(battle.router)
 app.include_router(challenge.router)
 app.include_router(ws.router)
+app.include_router(heckle.router)
 
 
 @app.get("/api/health")
