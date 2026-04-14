@@ -19,6 +19,7 @@ cp .env.template .env
 # Edit .env and add your OPENAI_API_KEY
 
 # Initialize database
+alembic revision --autogenerate -m "initial tables"
 alembic upgrade head
 
 # Run development server
