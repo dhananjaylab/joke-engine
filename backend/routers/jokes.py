@@ -15,19 +15,23 @@ from models.profile import UserProfile
 from arq import create_pool
 from arq.connections import RedisSettings
 from core.config import get_settings
+from workers.fallback import score_joke_sync
 
 router = APIRouter(prefix="/api/jokes", tags=["jokes"])
 _settings = get_settings()
 
 
 async def _enqueue_score(joke_id: int):
-    """Enqueue background scoring task."""
+    """Enqueue background scoring task with fallback."""
     try:
         pool = await create_pool(RedisSettings.from_dsn(_settings.redis_url))
         await pool.enqueue_job("task_score_joke", joke_id)
-        await pool.close()
+        await pool.close(close_connection_pool=True)
+        print(f"✓ Enqueued scoring task for joke {joke_id}")
     except Exception as e:
-        print(f"ARQ enqueue failed (non-critical): {e}")
+        # Fallback: score synchronously in background
+        print(f"ARQ enqueue failed, using fallback scoring for joke {joke_id}: {e}")
+        asyncio.create_task(score_joke_sync(joke_id))
 
 
 @router.post("/generate", response_model=JokeResponse)
