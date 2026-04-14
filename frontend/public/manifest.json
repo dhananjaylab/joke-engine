@@ -1,0 +1,56 @@
+{
+  "name": "Giggle - AI Joke Engine",
+  "short_name": "Giggle",
+  "description": "Generate hilarious AI jokes with different styles and share them with friends",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#a855f7",
+  "orientation": "portrait-primary",
+  "categories": ["entertainment", "social"],
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Generate Joke",
+      "short_name": "Generate",
+      "description": "Generate a new joke",
+      "url": "/",
+      "icons": [
+        {
+          "src": "/favicon.svg",
+          "sizes": "any",
+          "type": "image/svg+xml"
+        }
+      ]
+    },
+    {
+      "name": "View History",
+      "short_name": "History",
+      "description": "View your joke history",
+      "url": "/history",
+      "icons": [
+        {
+          "src": "/favicon.svg",
+          "sizes": "any",
+          "type": "image/svg+xml"
+        }
+      ]
+    }
+  ],
+  "share_target": {
+    "action": "/",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  }
+}

@@ -11,7 +11,27 @@ from services import ai
 from dependencies.profile import get_profile
 from models.profile import UserProfile
 
+# ARQ imports
+from arq import create_pool
+from arq.connections import RedisSettings
+from core.config import get_settings
+from workers.fallback import score_joke_sync
+
 router = APIRouter(prefix="/api/jokes", tags=["jokes"])
+_settings = get_settings()
+
+
+async def _enqueue_score(joke_id: int):
+    """Enqueue background scoring task with fallback."""
+    try:
+        pool = await create_pool(RedisSettings.from_dsn(_settings.redis_url))
+        await pool.enqueue_job("task_score_joke", joke_id)
+        await pool.close(close_connection_pool=True)
+        print(f"✓ Enqueued scoring task for joke {joke_id}")
+    except Exception as e:
+        # Fallback: score synchronously in background
+        print(f"ARQ enqueue failed, using fallback scoring for joke {joke_id}: {e}")
+        asyncio.create_task(score_joke_sync(joke_id))
 
 
 @router.post("/generate", response_model=JokeResponse)
@@ -43,6 +63,9 @@ async def generate_joke(
     profile.xp += 5
     await db.commit()
 
+    # Enqueue background scoring task
+    asyncio.create_task(_enqueue_score(new_joke.id))
+
     return new_joke
 
 
@@ -70,8 +93,14 @@ async def stream_joke_sse(
         )
         if full_text:
             composite = f"{query.strip()} [{style}]"
-            db.add(Joke(query=composite, response=full_text))
+            new_joke = Joke(query=composite, response=full_text)
+            db.add(new_joke)
+            await db.flush()
+            await db.refresh(new_joke)
             await db.commit()
+            
+            # Enqueue background scoring task
+            asyncio.create_task(_enqueue_score(new_joke.id))
 
     return StreamingResponse(
         event_generator(),

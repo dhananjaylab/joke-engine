@@ -1,29 +1,41 @@
 import { useState } from 'react'
 import { useJokeStream } from '@/hooks/useJokeStream'
+import { useJokeWebSocket } from '@/hooks/useJokeWebSocket'
 import { useJokeStore } from '@/store/jokeStore'
 import { useProfileStore } from '@/store/profileStore'
 import { StyleSelect } from '@/components/StyleSelect'
 import { TrendChips } from '@/components/TrendChips'
+import { StreamingToggle } from '@/components/StreamingToggle'
 import { triggerConfetti } from '@/lib/confetti'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 
 export default function Home() {
   const [query, setQuery] = useState('')
+  const [useWebSocket, setUseWebSocket] = useState(false)
   const { currentStyle, setStyle, streamingTokens, clearStream } = useJokeStore()
   const { fetch: fetchProfile } = useProfileStore()
 
-  const { streaming, startStream } = useJokeStream({
+  const sseStream = useJokeStream({
     onComplete: (full) => {
       triggerConfetti(currentStyle)
       fetchProfile()
     },
   })
 
+  const wsStream = useJokeWebSocket({
+    onComplete: (full) => {
+      triggerConfetti(currentStyle)
+      fetchProfile()
+    },
+  })
+
+  const currentStream = useWebSocket ? wsStream : sseStream
+
   const handleGenerate = () => {
     if (!query.trim()) return
     clearStream()
-    startStream(query.trim(), currentStyle)
+    currentStream.startStream(query.trim(), currentStyle)
   }
 
   return (
@@ -39,20 +51,25 @@ export default function Home() {
           className="flex-1 rounded-xl"
         />
         <StyleSelect value={currentStyle} onChange={setStyle} />
-        <Button onClick={handleGenerate} disabled={streaming || !query.trim()}>
-          {streaming ? 'Generating…' : 'Go'}
+        <Button onClick={handleGenerate} disabled={currentStream.streaming || !query.trim()}>
+          {currentStream.streaming ? 'Generating…' : 'Go'}
         </Button>
+      </div>
+
+      {/* Streaming toggle */}
+      <div className="flex justify-center">
+        <StreamingToggle useWebSocket={useWebSocket} onChange={setUseWebSocket} />
       </div>
 
       {/* Trend chips */}
       <TrendChips onSelect={setQuery} />
 
       {/* Streaming result */}
-      {(streaming || streamingTokens) && (
+      {(currentStream.streaming || streamingTokens) && (
         <div className="joke-card p-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-2xl min-h-[80px]">
           <p className="text-zinc-900 dark:text-zinc-100 leading-relaxed">
             {streamingTokens}
-            {streaming && <span className="animate-pulse">▍</span>}
+            {currentStream.streaming && <span className="animate-pulse">▍</span>}
           </p>
         </div>
       )}
