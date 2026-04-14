@@ -4,8 +4,8 @@ import { jokeApi } from '@/api/jokes'
 import { toast } from 'sonner'
 
 interface ShareButtonProps {
-  jokeId: number
-  jokeText: string
+  readonly jokeId: number
+  readonly jokeText: string
 }
 
 export function ShareButton({ jokeId, jokeText }: ShareButtonProps) {
@@ -20,7 +20,7 @@ export function ShareButton({ jokeId, jokeText }: ShareButtonProps) {
         await navigator.share({
           title: 'Giggle Joke',
           text: jokeText,
-          url: window.location.origin + `/joke/${jokeId}`,
+          url: globalThis.location.origin + `/joke/${jokeId}`,
         })
       } else {
         await navigator.clipboard.writeText(jokeText)
