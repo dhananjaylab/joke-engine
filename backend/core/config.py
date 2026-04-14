@@ -22,6 +22,14 @@ class Settings(BaseSettings):
     # Media
     media_dir: str = "./media"
 
+    # Cloud Storage (optional - for R2/S3)
+    use_cloud_storage: bool = False
+    s3_endpoint_url: str = ""  # e.g., https://account-id.r2.cloudflarestorage.com
+    s3_access_key_id: str = ""
+    s3_secret_access_key: str = ""
+    s3_bucket_name: str = ""
+    s3_public_url: str = ""  # e.g., https://your-bucket.r2.dev
+
     # Trends
     newsapi_key: str = ""
 

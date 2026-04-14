@@ -14,11 +14,13 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: create tables + media dir
+    # Startup: create tables + media dir (only if using local storage)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    os.makedirs(settings.media_dir, exist_ok=True)
-    os.makedirs(os.path.join(settings.media_dir, "audio"), exist_ok=True)
+    
+    if not settings.use_cloud_storage:
+        os.makedirs(settings.media_dir, exist_ok=True)
+        os.makedirs(os.path.join(settings.media_dir, "audio"), exist_ok=True)
 
     # Start APScheduler for weekly challenge
     from tasks.scheduler import scheduler
@@ -49,8 +51,9 @@ app.add_middleware(
 # Session cookie middleware
 app.add_middleware(SessionMiddleware, secret_key=settings.secret_key)
 
-# Mount media files (TTS audio, card PNGs)
-app.mount("/media", StaticFiles(directory=settings.media_dir), name="media")
+# Mount media files (only for local storage)
+if not settings.use_cloud_storage:
+    app.mount("/media", StaticFiles(directory=settings.media_dir), name="media")
 
 # Routers
 app.include_router(jokes.router)
