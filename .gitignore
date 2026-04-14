@@ -1,4 +1,49 @@
-.env
-venv
-*.sqlite3
+# Python
 __pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# FastAPI / Backend
+.env
+*.db
+*.sqlite
+*.sqlite3
+giggle.db
+media/
+alembic/versions/*.py
+!alembic/versions/__init__.py
+
+# Node / Frontend
+node_modules/
+dist/
+.cache/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Docker
+*.env.local
+docker-compose.override.yml
+
+# Misc
+.pytest_cache/
+.coverage
+htmlcov/

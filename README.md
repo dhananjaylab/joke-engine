@@ -1,160 +1,201 @@
-# 🎭 Joke Engine
+# Giggle — AI Joke Engine
 
-**Joke Engine** is a Django-based GenAI application that generates custom jokes on any topic using OpenAI's GPT models. It features a history tracking system, local caching to save API costs, and a clean Bootstrap UI.
+> **Backend:** Python 3.11 · FastAPI · SQLAlchemy 2 async · Alembic · ARQ · uvicorn  
+> **Frontend:** React 18 · Vite 5 · TypeScript · Tailwind CSS · TanStack Query · Zustand  
+> **DB:** SQLite (dev) → PostgreSQL + pgvector (prod)
 
-![Architecture](https://img.shields.io/badge/Architecture-Django_MVC-green)
-![AI](https://img.shields.io/badge/AI-OpenAI_GPT--3.5-blue)
+## Quick Start
 
-## 🚀 Features
-
-*   **AI-Powered Humor:** Generates unique jokes based on user input topics.
-*   **Smart Caching:** Checks the local database for existing jokes before calling the API to reduce latency and costs.
-*   **History Tracking:** View previously generated jokes with pagination.
-*   **Management:** Delete old jokes from the history.
-*   **Responsive UI:** Clean interface built with Bootstrap 5.
-
-**New Features Added / Planned**
-
-- **Comedian Persona:** Choose a style (`witty`, `dad`, `sarcastic`, `roast`, `haiku`) from the search form. The backend adjusts the system prompt to match the persona.
-- **Smart Caching by Style:** Results are cached using a composite query key (e.g., `Cats [dad]`) so different styles are stored separately.
-- **Regenerate / Remix:** A "Regenerate" button forces a fresh API call, bypassing the local cache when you want a new variation.
-- **Live Mic (TTS):** A small "Listen" button uses the browser Web Speech API to read jokes aloud.
-- **Copy to Clipboard:** Quickly copy jokes to share with one click.
-
-See the `giggle/` templates and views for usage details. Run `python manage.py makemigrations` and `python manage.py migrate` after pulling changes if you updated the models.
-
-## 🛠️ Tech Stack
-
-*   **Backend:** Python, Django 4.x
-*   **AI Engine:** OpenAI API (GPT-3.5-turbo)
-*   **Database:** SQLite (Default)
-*   **Frontend:** HTML5, CSS3, Bootstrap 5
-*   **Configuration:** Python-Decouple
-
-## 📂 Project Structure
-
-```text
-dhananjaylab-joke-engine/
-├── giggle/              # Main App Logic (Views, Models, APIs)
-├── project/             # Project Settings & Config
-├── manage.py            # Django Entry Point
-├── db.sqlite3           # Local Database
-└── .env                 # Secrets (Not committed)
-```
-
-⚡ Getting Started
-
-Follow these steps to set up the application locally.
-
-### Prerequisites
-
-Python 3.8 or higher
-
-An OpenAI API Key (Get one here)
-
-1. Clone the Repository
+### Backend Setup
 
 ```bash
-git clone https://github.com/dhananjaylab/joke-engine.git
-cd dhananjaylab-joke-engine
-```
-
-2. Create Virtual Environment
-
-It is recommended to use a virtual environment.
-
-```bash
-# Windows
-python -m venv venv
-venv\Scripts\activate
-
-# Mac/Linux
-python3 -m venv venv
-source venv/bin/activate
-```
-
-3. Install Dependencies
-
-Create a requirements.txt file (if not present) with the following content, then install:
-
-requirements.txt:
-
-```text
-Django>=4.2.3
-openai>=0.27.0
-python-decouple>=3.8
-```
-
-Install:
-
-```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+
+# Create .env file
+cp .env.template .env
+# Edit .env and add your OPENAI_API_KEY
+
+# Initialize database
+alembic revision --autogenerate -m "initial tables"
+alembic upgrade head
+
+# Run development server
+uvicorn main:app --reload --port 8000
 ```
 
-4. Configure Environment Variables
-
-Create a .env file in the root directory (same level as manage.py) and add your OpenAI key:
-
-```ini
-CHATGPT_API_KEY=sk-your-openai-api-key-here
-DEBUG=True
-SECRET_KEY=your-secret-key-for-dev
-```
-
-5. Database Migration
-
-Initialize the SQLite database.
+### Frontend Setup
 
 ```bash
-python manage.py makemigrations
-python manage.py migrate
+cd frontend
+npm install
+npm run dev  # Starts on http://localhost:5173
 ```
 
-6. Run the Application
+The Vite dev server automatically proxies `/api/*` requests to `localhost:8000`.
+
+### Optional: ARQ Worker (for background scoring)
+
+Requires Redis running locally:
 
 ```bash
-python manage.py runserver
+# In a separate terminal
+cd backend
+arq workers.settings.WorkerSettings
 ```
 
-Open your browser and navigate to:
-👉 http://127.0.0.1:8000/
+## Production Deployment
 
-## 📖 Usage Guide
+### Using Docker Compose
 
-Search: Enter a topic (e.g., "Programmers", "Pizza", "Cats") in the search bar.
+```bash
+# Create .env file with production secrets
+echo "POSTGRES_PASSWORD=your_secure_password" > .env
+echo "SECRET_KEY=your_secret_key" >> .env
+echo "OPENAI_API_KEY=your_openai_key" >> .env
 
-Read: The AI will generate a joke. If you search the same topic again, it pulls from the database instantly.
+# Build and start all services
+docker-compose up -d
 
-History: Click "See history" to view all past jokes.
-
-Delete: Use the trash icon in the history view to remove jokes you don't like.
-
-## 🤝 Contributing
-
-Fork the repository.
-
-Create a new feature branch (git checkout -b feature/AmazingFeature).
-
-Commit your changes.
-
-Push to the branch.
-
-Open a Pull Request.
-
-## 📝 License
-
-Distributed under the MIT License.
-
-### Part 4: Essential Missing File
-
-You must add a `requirements.txt` file to the root of the repository for the application to run on other machines.
-
-**File:** `requirements.txt`
-```text
-asgiref==3.7.2
-Django==4.2.3
-openai==0.27.8
-python-decouple==3.8
-sqlparse==0.4.4
-typing_extensions==4.7.1
+# View logs
+docker-compose logs -f api
 ```
+
+Services:
+- **Frontend:** http://localhost (nginx)
+- **API:** http://localhost/api (proxied through nginx)
+- **PostgreSQL:** Internal only
+- **Redis:** Internal only
+- **ARQ Worker:** Background task processor
+
+## Project Structure
+
+```
+joke-engine/
+├── backend/                 # FastAPI service
+│   ├── main.py             # App entry point
+│   ├── core/               # Config & database
+│   ├── models/             # SQLAlchemy models
+│   ├── schemas/            # Pydantic schemas
+│   ├── routers/            # API endpoints
+│   ├── services/           # Business logic (AI, image, etc.)
+│   ├── middleware/         # Session management
+│   ├── dependencies/       # FastAPI dependencies
+│   ├── workers/            # ARQ background tasks
+│   ├── tasks/              # APScheduler jobs
+│   └── alembic/            # Database migrations
+│
+├── frontend/               # React + Vite SPA
+│   ├── src/
+│   │   ├── api/           # API client & hooks
+│   │   ├── components/    # React components
+│   │   ├── hooks/         # Custom hooks
+│   │   ├── pages/         # Route pages
+│   │   ├── store/         # Zustand state
+│   │   └── lib/           # Utilities
+│   └── public/            # Static assets
+│
+├── docker-compose.yml     # Production orchestration
+├── nginx.conf             # Reverse proxy config
+└── README.md
+```
+
+## Features
+
+### Phase 0-1: Core Functionality ✅
+- Joke generation with multiple personas (witty, dad, sarcastic, roast, haiku, brainrot, etc.)
+- SSE streaming for real-time joke delivery
+- Joke history with pagination
+- Session-based user profiles
+
+### Phase 2: Viral Features ✅
+- Share cards (PNG generation)
+- Text-to-speech audio
+- Heckle mode (AI roasts your jokes)
+- Explain mode (over-analytical joke explanations)
+
+### Phase 3: Gamification ✅
+- XP system
+- Daily streak tracking
+- Rank progression (Open Mic → Club Regular → Headliner → Legend → GOAT)
+
+### Phase 4: Advanced AI (Optional)
+- Background joke scoring (ARQ workers)
+- 3-dimensional ratings (originality, timing, cleverness)
+
+### Phase 5: Real-time (Optional)
+- WebSocket support for streaming
+- PWA capabilities
+
+### Phase 6: Production (Optional)
+- PostgreSQL with pgvector
+- Semantic deduplication
+- Full Docker deployment
+
+## API Endpoints
+
+### Jokes
+- `POST /api/jokes/generate` - Generate a new joke
+- `GET /api/jokes/stream` - SSE streaming endpoint
+- `GET /api/jokes/history` - Paginated joke history
+- `GET /api/jokes/{id}` - Get specific joke
+- `DELETE /api/jokes/{id}` - Delete joke
+- `POST /api/jokes/{id}/heckle` - Get AI roast
+- `POST /api/jokes/{id}/explain` - Get explanation
+
+### Share
+- `GET /api/share/{id}/card.png` - Download joke card
+- `GET /api/share/{id}/audio` - Get TTS audio
+- `POST /api/share/{id}/increment` - Track share count
+
+### Profile
+- `GET /api/profile` - Get user profile (XP, streak, rank)
+
+### WebSocket
+- `WS /ws/joke` - Real-time joke streaming
+
+## Environment Variables
+
+See `backend/.env.template` for all available options.
+
+Required:
+- `OPENAI_API_KEY` - Your OpenAI API key
+- `SECRET_KEY` - Session signing key (production)
+
+Optional:
+- `DATABASE_URL` - Database connection string
+- `REDIS_URL` - Redis connection for ARQ workers
+- `NEWSAPI_KEY` - For trending topics feature
+
+## Development Tips
+
+### Database Migrations
+
+```bash
+# Create a new migration
+alembic revision --autogenerate -m "description"
+
+# Apply migrations
+alembic upgrade head
+
+# Rollback
+alembic downgrade -1
+```
+
+### Testing API
+
+```bash
+# Health check
+curl http://localhost:8000/api/health
+
+# Generate joke
+curl -X POST http://localhost:8000/api/jokes/generate \
+  -H "Content-Type: application/json" \
+  -d '{"query": "cats", "style": "witty"}'
+```
+
+## License
+
+MIT
