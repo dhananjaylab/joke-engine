@@ -12,6 +12,7 @@ class Settings(BaseSettings):
 
     # AI
     openai_api_key: str
+    groq_api_key: str = ""
 
     # Redis (optional — required for P4+ ARQ workers)
     redis_url: str = "redis://localhost:6379"
@@ -32,6 +33,9 @@ class Settings(BaseSettings):
 
     # Trends
     newsapi_key: str = ""
+
+    # API Ninjas
+    api_ninjas_key: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

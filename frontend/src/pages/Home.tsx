@@ -1,6 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useJokeStream } from '@/hooks/useJokeStream'
-import { useJokeWebSocket } from '@/hooks/useJokeWebSocket'
 import { useJokeStore } from '@/store/jokeStore'
 import { useProfileStore } from '@/store/profileStore'
 import { StyleSelect } from '@/components/StyleSelect'
@@ -8,28 +7,41 @@ import { TrendChips } from '@/components/TrendChips'
 import { triggerConfetti } from '@/lib/confetti'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { jokeApi } from '@/api/jokes'
 
 export default function Home() {
   const [query, setQuery] = useState('')
-  const [useWebSocket, setUseWebSocket] = useState(false)
+  const [jokeOfTheDay, setJokeOfTheDay] = useState<string | null>(null)
+  const [jotdLoading, setJotdLoading] = useState(true)
+  const [jotdError, setJotdError] = useState<string | null>(null)
   const { currentStyle, setStyle, streamingTokens, clearStream } = useJokeStore()
   const { fetch: fetchProfile } = useProfileStore()
 
+  // Fetch joke of the day on mount
+  useEffect(() => {
+    const fetchJokeOfTheDay = async () => {
+      try {
+        const data = await jokeApi.jokeOfTheDay()
+        setJokeOfTheDay(data.joke)
+        setJotdError(null)
+      } catch (error: any) {
+        console.error('Failed to fetch joke of the day:', error)
+        setJotdError(error?.message || 'Failed to load')
+      } finally {
+        setJotdLoading(false)
+      }
+    }
+    fetchJokeOfTheDay()
+  }, [])
+
   const sseStream = useJokeStream({
-    onComplete: (full) => {
+    onComplete: () => {
       triggerConfetti(currentStyle)
       fetchProfile()
     },
   })
 
-  const wsStream = useJokeWebSocket({
-    onComplete: (full) => {
-      triggerConfetti(currentStyle)
-      fetchProfile()
-    },
-  })
-
-  const currentStream = useWebSocket ? wsStream : sseStream
+  const currentStream = sseStream
 
   const handleGenerate = () => {
     if (!query.trim()) return
@@ -39,6 +51,45 @@ export default function Home() {
 
   return (
     <div className="space-y-6 sm:space-y-8 max-w-3xl mx-auto">
+      {/* Joke of the Day Banner */}
+      {jokeOfTheDay && (
+        <div className="bg-gradient-to-r from-gold-400/10 via-gold-500/10 to-gold-400/10 border border-gold-400/30 rounded-2xl p-4 sm:p-6 relative overflow-hidden animate-in fade-in slide-in-from-top-4 duration-700">
+          {/* Animated background elements */}
+          <div className="absolute top-0 right-0 w-32 h-32 bg-gold-400/5 rounded-full blur-3xl animate-pulse"></div>
+          <div className="absolute bottom-0 left-0 w-24 h-24 bg-gold-500/5 rounded-full blur-2xl animate-pulse delay-300"></div>
+          
+          {/* Sparkle effects */}
+          <div className="absolute top-4 right-8 text-gold-400/30 animate-bounce delay-100">✨</div>
+          <div className="absolute top-8 right-16 text-gold-400/20 animate-bounce delay-300">⭐</div>
+          <div className="absolute bottom-6 left-8 text-gold-400/25 animate-bounce delay-500">💫</div>
+          
+          <div className="relative">
+            <div className="flex items-center gap-2 mb-3 animate-in fade-in slide-in-from-left duration-500">
+              <span className="text-2xl animate-bounce">🌟</span>
+              <h2 className="text-lg sm:text-xl font-bold text-gold-400 tracking-wide">
+                Joke of the Day
+              </h2>
+            </div>
+            <p className="text-white text-base sm:text-lg leading-relaxed animate-in fade-in slide-in-from-bottom duration-700 delay-200">
+              {jokeOfTheDay}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {jotdLoading && (
+        <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-4 sm:p-6 animate-pulse">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-8 h-8 bg-zinc-800 rounded"></div>
+            <div className="h-6 w-40 bg-zinc-800 rounded"></div>
+          </div>
+          <div className="space-y-2">
+            <div className="h-4 bg-zinc-800 rounded w-full"></div>
+            <div className="h-4 bg-zinc-800 rounded w-3/4"></div>
+          </div>
+        </div>
+      )}
+
       {/* Status Badges */}
       <div className="flex items-center justify-center gap-2 sm:gap-3 text-xs sm:text-sm flex-wrap">
         <div className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full bg-zinc-800/50 border border-zinc-700">
@@ -87,13 +138,9 @@ export default function Home() {
           className="w-full h-12 sm:h-14 bg-gold-400 hover:bg-gold-500 text-black font-bold text-base sm:text-lg rounded-xl transition-all hover:shadow-lg hover:shadow-gold-400/20 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {currentStream.streaming ? (
-            <>
-              <span className="animate-pulse">Generating...</span>
-            </>
+            <span className="animate-pulse">Generating...</span>
           ) : (
-            <>
-              GENERATE ⚡
-            </>
+            'GENERATE ⚡'
           )}
         </Button>
       </div>
@@ -174,10 +221,10 @@ function HeckleBox() {
         {loading ? (
           <span className="flex items-center gap-2">
             <span className="animate-spin">⚡</span>
-            Rating...
+            {' '}Rating...
           </span>
         ) : (
-          <>🔥 GET ROASTED</>
+          '🔥 GET ROASTED'
         )}
       </Button>
       {result && (

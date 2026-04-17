@@ -46,4 +46,7 @@ export const jokeApi = {
 
   incrementShare: (id: number) =>
     api.post(`/api/share/${id}/increment`),
+
+  jokeOfTheDay: () =>
+    api.get<{ joke: string }>('/api/jokes/joke-of-the-day').then(r => r.data),
 }
