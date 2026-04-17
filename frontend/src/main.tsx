@@ -10,6 +10,7 @@ const History = React.lazy(() => import('./pages/History'))
 const Battle = React.lazy(() => import('./pages/Battle'))
 const Heckle = React.lazy(() => import('./pages/Heckle'))
 const JokeDetail = React.lazy(() => import('./pages/JokeDetail'))
+const Profile = React.lazy(() => import('./pages/Profile'))
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -60,6 +61,14 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
               element={
                 <React.Suspense fallback={null}>
                   <JokeDetail />
+                </React.Suspense>
+              }
+            />
+            <Route
+              path="profile"
+              element={
+                <React.Suspense fallback={null}>
+                  <Profile />
                 </React.Suspense>
               }
             />

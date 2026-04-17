@@ -20,36 +20,47 @@ export default function History() {
 
   if (isLoading) {
     return (
-      <div className="flex justify-center py-12 text-zinc-400 text-sm">Loading…</div>
+      <div className="flex justify-center py-12">
+        <div className="animate-pulse text-zinc-400">Loading your comedy history...</div>
+      </div>
     )
   }
 
   return (
-    <div className="space-y-4">
-      {data?.jokes.map((joke) => (
-        <JokeCard key={joke.id} joke={joke} onDelete={(id) => deleteMutation.mutate(id)} />
-      ))}
+    <div className="space-y-6 max-w-3xl mx-auto">
+      <div className="space-y-2">
+        <h1 className="text-3xl font-bold text-white">Your Comedy History</h1>
+        <p className="text-zinc-400">All the jokes you've generated</p>
+      </div>
+
+      <div className="space-y-4">
+        {data?.jokes.map((joke) => (
+          <JokeCard key={joke.id} joke={joke} onDelete={(id) => deleteMutation.mutate(id)} />
+        ))}
+      </div>
 
       {/* Pagination */}
-      <div className="flex justify-between items-center pt-2">
+      <div className="flex justify-between items-center pt-4">
         <Button
           variant="ghost"
           size="sm"
           onClick={() => setPage((p) => p - 1)}
           disabled={page <= 1}
+          className="text-zinc-400 hover:text-white"
         >
-          Previous
+          ← Previous
         </Button>
-        <span className="text-xs text-zinc-400">
-          {page} / {data?.pages ?? 1}
+        <span className="text-sm text-zinc-400">
+          Page {page} of {data?.pages ?? 1}
         </span>
         <Button
           variant="ghost"
           size="sm"
           onClick={() => setPage((p) => p + 1)}
           disabled={page >= (data?.pages ?? 1)}
+          className="text-zinc-400 hover:text-white"
         >
-          Next
+          Next →
         </Button>
       </div>
     </div>
