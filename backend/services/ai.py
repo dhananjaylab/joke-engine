@@ -5,6 +5,14 @@ from core.config import get_settings
 settings = get_settings()
 client = AsyncOpenAI(api_key=settings.openai_api_key)
 
+# Groq client for Reverse Heckler
+groq_client = None
+if settings.groq_api_key:
+    groq_client = AsyncOpenAI(
+        api_key=settings.groq_api_key,
+        base_url="https://api.groq.com/openai/v1"
+    )
+
 PERSONAS: dict[str, str] = {
     "witty": "You are a clever stand-up comedian. Write concise, punchy jokes.",
     "dad": "You are a cheesy dad comedian. Make lighthearted puns and wholesome punchlines.",
@@ -64,8 +72,13 @@ async def stream_joke(query: str, style: str = "witty"):
 
 
 async def heckle(user_joke: str) -> str:
-    result = await client.chat.completions.create(
-        model="gpt-4o-mini",
+    """Use Groq LLM for faster, funnier roasts."""
+    # Use Groq if available, fallback to OpenAI
+    active_client = groq_client if groq_client else client
+    model = "groq/compound-mini" if groq_client else "gpt-4o-mini"
+    
+    result = await active_client.chat.completions.create(
+        model=model,
         temperature=0.8,
         max_tokens=200,
         messages=[
