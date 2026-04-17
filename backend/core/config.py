@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     # Trends
     newsapi_key: str = ""
 
+    # API Ninjas
+    api_ninjas_key: str = ""
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

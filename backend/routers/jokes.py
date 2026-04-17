@@ -137,6 +137,25 @@ async def get_history(
     )
 
 
+@router.get("/joke-of-the-day")
+async def get_joke_of_the_day(db: AsyncSession = Depends(get_db)):
+    """
+    Get the joke of the day. Fetches from API Ninjas once per day (UTC timezone)
+    and caches in database for all users.
+    """
+    from services.daily_joke import get_or_fetch_daily_joke
+    
+    try:
+        joke_text = await get_or_fetch_daily_joke(db)
+        return {"joke": joke_text}
+    except Exception as e:
+        print(f"Error fetching joke of the day: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail=f"Failed to fetch joke of the day: {str(e)}"
+        )
+
+
 @router.delete("/{joke_id}", status_code=204)
 async def delete_joke(joke_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Joke).where(Joke.id == joke_id))
