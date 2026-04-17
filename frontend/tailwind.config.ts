@@ -37,4 +37,12 @@ export default {
     },
   },
   plugins: [],
+  safelist: [
+    'text-gold-400',
+    'bg-gold-400',
+    'bg-gold-500',
+    'hover:bg-gold-500',
+    'border-gold-400',
+    'ring-gold-400',
+  ],
 } satisfies Config
