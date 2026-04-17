@@ -1,24 +1,30 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@700&display=swap');
+
 :root {
-  /* HSL Design Tokens */
-  --bg-color: 240 10% 3.9%;
+  /* HSL Design Tokens - Dark Theme */
+  --bg-color: 0 0% 7%;
   --fg-color: 0 0% 98%;
-  --primary: 263.4 70% 50.4%;
-  --primary-foreground: 210 40% 98%;
-  --secondary: 240 3.7% 15.9%;
+  --primary: 45 93% 58%;
+  --primary-foreground: 0 0% 0%;
+  --secondary: 0 0% 15%;
   --secondary-foreground: 0 0% 98%;
-  --accent: 240 3.7% 15.9%;
-  --accent-foreground: 0 0% 98%;
+  --accent: 45 93% 58%;
+  --accent-foreground: 0 0% 0%;
   --destructive: 0 62.8% 30.6%;
   --destructive-foreground: 0 0% 98%;
-  --border: 240 3.7% 15.9%;
-  --input: 240 3.7% 15.9%;
-  --ring: 240 4.9% 83.9%;
+  --border: 0 0% 20%;
+  --input: 0 0% 15%;
+  --ring: 45 93% 58%;
   --radius: 0.75rem;
 
   /* Glassmorphism */
   --glass-bg: rgba(23, 23, 23, 0.7);
   --glass-border: rgba(255, 255, 255, 0.1);
   --glass-blur: 12px;
+  
+  /* Gold/Yellow accent */
+  --gold: 45 93% 58%;
+  --gold-dark: 38 92% 50%;
 }
 
 * {
@@ -36,6 +42,7 @@ body {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  background-image: radial-gradient(circle at 50% 0%, rgba(251, 191, 36, 0.05) 0%, transparent 50%);
 }
 
 #root {
