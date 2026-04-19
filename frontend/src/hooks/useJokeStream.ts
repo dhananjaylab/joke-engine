@@ -2,7 +2,7 @@ import { useState, useCallback, useRef } from 'react'
 import { useJokeStore } from '@/store/jokeStore'
 
 interface UseJokeStreamOptions {
-  onComplete?: (fullText: string) => void
+  onComplete?: (fullText: string, jokeId?: number) => void
   onError?: (err: Error) => void
 }
 
@@ -34,6 +34,7 @@ export function useJokeStream({ onComplete, onError }: UseJokeStreamOptions = {}
         const reader = res.body.getReader()
         const decoder = new TextDecoder()
         const accumulated: string[] = []
+        let jokeId: number | undefined
 
         while (true) {
           const { done, value } = await reader.read()
@@ -45,11 +46,18 @@ export function useJokeStream({ onComplete, onError }: UseJokeStreamOptions = {}
               const token = line.slice(6)
               if (token === '[DONE]') {
                 const full = accumulated.join('')
-                onComplete?.(full)
+                onComplete?.(full, jokeId)
                 break
+              } else if (token.startsWith('[JOKE_ID:')) {
+                // Extract joke ID from [JOKE_ID:123] format
+                const idMatch = /\[JOKE_ID:(\d+)\]/.exec(token)
+                if (idMatch) {
+                  jokeId = Number.parseInt(idMatch[1], 10)
+                }
+              } else {
+                accumulated.push(token)
+                setStreamingTokens(accumulated.join(''))
               }
-              accumulated.push(token)
-              setStreamingTokens(accumulated.join(''))
             }
           }
         }

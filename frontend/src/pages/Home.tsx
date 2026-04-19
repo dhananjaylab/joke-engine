@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useJokeStream } from '@/hooks/useJokeStream'
 import { useJokeStore } from '@/store/jokeStore'
 import { useProfileStore } from '@/store/profileStore'
@@ -11,12 +12,28 @@ import { jokeApi } from '@/api/jokes'
 import type { JokeResponse } from '@/api/jokes'
 
 export default function Home() {
+  const location = useLocation()
   const [query, setQuery] = useState('')
   const [jokeOfTheDay, setJokeOfTheDay] = useState<string | null>(null)
   const [jotdLoading, setJotdLoading] = useState(true)
-  const [jotdError, setJotdError] = useState<string | null>(null)
-  const { currentStyle, setStyle, streamingTokens, clearStream } = useJokeStore()
+  const { currentStyle, setStyle, streamingTokens, clearStream, setJoke } = useJokeStore()
   const { fetch: fetchProfile } = useProfileStore()
+
+  // Handle navigation state (from navbar search)
+  useEffect(() => {
+    if (location.state?.query) {
+      setQuery(location.state.query)
+      if (location.state.style) {
+        setStyle(location.state.style)
+      }
+      // Auto-generate if query was passed
+      setTimeout(() => {
+        handleGenerate(location.state.query, location.state.style || currentStyle)
+      }, 100)
+      // Clear the state
+      globalThis.history.replaceState({}, document.title)
+    }
+  }, [location.state, currentStyle, setStyle])
 
   // Fetch joke of the day on mount
   useEffect(() => {
@@ -24,10 +41,8 @@ export default function Home() {
       try {
         const data = await jokeApi.jokeOfTheDay()
         setJokeOfTheDay(data.joke)
-        setJotdError(null)
       } catch (error: any) {
         console.error('Failed to fetch joke of the day:', error)
-        setJotdError(error?.message || 'Failed to load')
       } finally {
         setJotdLoading(false)
       }
@@ -36,18 +51,24 @@ export default function Home() {
   }, [])
 
   const sseStream = useJokeStream({
-    onComplete: () => {
+    onComplete: (joke, id) => {
       triggerConfetti(currentStyle)
       fetchProfile()
+      if (id) {
+        setJoke(joke, id)
+      }
     },
   })
 
   const currentStream = sseStream
 
-  const handleGenerate = () => {
-    if (!query.trim()) return
+  const handleGenerate = (queryText?: string, styleText?: string) => {
+    const finalQuery = queryText || query.trim()
+    const finalStyle = styleText || currentStyle
+    
+    if (!finalQuery) return
     clearStream()
-    currentStream.startStream(query.trim(), currentStyle)
+    currentStream.startStream(finalQuery, finalStyle)
   }
 
   return (
@@ -123,7 +144,7 @@ export default function Home() {
         </div>
 
         <Button 
-          onClick={handleGenerate} 
+          onClick={() => handleGenerate()} 
           disabled={currentStream.streaming || !query.trim()}
           className="w-full h-12 sm:h-14 bg-gold-400 hover:bg-gold-500 text-black font-bold text-base sm:text-lg rounded-xl transition-all hover:shadow-lg hover:shadow-gold-400/20 disabled:opacity-50 disabled:cursor-not-allowed"
         >

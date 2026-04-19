@@ -156,6 +156,8 @@ async def stream_joke_sse(
                 duration_ms=duration_ms,
                 details={"query": composite, "text_length": len(full_text)},
             )
+            # Send the joke ID as the final event
+            yield f"data: [JOKE_ID:{new_joke.id}]\n\n"
 
     return StreamingResponse(
         event_generator(),
