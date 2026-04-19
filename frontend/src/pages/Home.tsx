@@ -91,17 +91,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* Status Badges */}
-      <div className="flex items-center justify-center gap-2 sm:gap-3 text-xs sm:text-sm flex-wrap">
-        <div className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full bg-zinc-800/50 border border-zinc-700">
-          <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-green-500 animate-pulse"></div>
-          <span className="text-zinc-300 text-[10px] sm:text-xs">LIVE AI ENGINE ACTIVE</span>
-        </div>
-        <div className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full bg-zinc-800/50 border border-zinc-700">
-          <span className="text-zinc-400 text-[10px] sm:text-xs">SSE/WEBSOCKET</span>
-        </div>
-      </div>
-
       {/* Hero Section */}
       <div className="text-center space-y-3 sm:space-y-4 px-4 sm:px-0">
         <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold tracking-tight leading-tight">
