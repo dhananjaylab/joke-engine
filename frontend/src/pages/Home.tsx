@@ -4,8 +4,10 @@ import { useJokeStream } from '@/hooks/useJokeStream'
 import { useJokeStore } from '@/store/jokeStore'
 import { useProfileStore } from '@/store/profileStore'
 import { StyleSelect } from '@/components/StyleSelect'
+import { LengthSelect } from '@/components/LengthSelect'
 import { TrendChips } from '@/components/TrendChips'
 import { VoicePlayer } from '@/components/VoicePlayer'
+import { StructuredRoast } from '@/components/StructuredRoast'
 import { triggerConfetti } from '@/lib/confetti'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -15,8 +17,10 @@ import type { JokeResponse } from '@/api/jokes'
 export default function Home() {
   const location = useLocation()
   const [query, setQuery] = useState('')
+  const [jokeLength, setJokeLength] = useState('short')
   const [jokeOfTheDay, setJokeOfTheDay] = useState<string | null>(null)
   const [jotdLoading, setJotdLoading] = useState(true)
+  const [completedJokeId, setCompletedJokeId] = useState<number | null>(null)
   const { currentStyle, setStyle, streamingTokens, clearStream, setJoke } = useJokeStore()
   const { fetch: fetchProfile } = useProfileStore()
 
@@ -57,19 +61,22 @@ export default function Home() {
       fetchProfile()
       if (id) {
         setJoke(joke, id)
+        setCompletedJokeId(id)
       }
     },
   })
 
   const currentStream = sseStream
 
-  const handleGenerate = (queryText?: string, styleText?: string) => {
+  const handleGenerate = (queryText?: string, styleText?: string, lengthText?: string) => {
     const finalQuery = queryText || query.trim()
     const finalStyle = styleText || currentStyle
+    const finalLength = lengthText || jokeLength
     
     if (!finalQuery) return
     clearStream()
-    currentStream.startStream(finalQuery, finalStyle)
+    setCompletedJokeId(null) // Reset completed joke ID
+    currentStream.startStream(finalQuery, finalStyle, finalLength)
   }
 
   return (
@@ -138,9 +145,15 @@ export default function Home() {
               className="bg-zinc-900 border-zinc-700 text-white placeholder:text-zinc-500 h-11 sm:h-12 rounded-xl text-sm sm:text-base"
             />
           </div>
-          <div className="w-full sm:w-auto">
-            <label className="block text-xs text-zinc-500 mb-2 uppercase tracking-wide">Style</label>
-            <StyleSelect value={currentStyle} onChange={setStyle} />
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-zinc-500 mb-2 uppercase tracking-wide">Style</label>
+              <StyleSelect value={currentStyle} onChange={setStyle} />
+            </div>
+            <div>
+              <LengthSelect value={jokeLength} onChange={setJokeLength} />
+            </div>
           </div>
         </div>
 
@@ -171,13 +184,21 @@ export default function Home() {
             {currentStream.streaming && <span className="animate-pulse ml-1">▍</span>}
           </p>
           
-          {/* Voice Player - Show only when streaming is complete and we have content */}
+          {/* Voice Player and Structured Roast - Show only when streaming is complete and we have content */}
           {!currentStream.streaming && streamingTokens && streamingTokens.trim().length > 10 && (
-            <div className="border-t border-zinc-800 pt-4">
+            <div className="border-t border-zinc-800 pt-4 space-y-4">
               <VoicePlayer 
                 text={streamingTokens} 
                 jokeStyle={currentStyle}
               />
+              
+              {/* Structured Roast for completed jokes */}
+              {completedJokeId && (
+                <StructuredRoast 
+                  jokeId={completedJokeId}
+                  jokeText={streamingTokens}
+                />
+              )}
             </div>
           )}
         </div>
@@ -198,26 +219,40 @@ export default function Home() {
 
 function HeckleBox() {
   const [input, setInput] = useState('')
-  const [result, setResult] = useState('')
+  const [roastData, setRoastData] = useState<any>(null)
   const [loading, setLoading] = useState(false)
 
   const submit = async () => {
     if (!input.trim()) return
     setLoading(true)
     try {
-      const res = await fetch('/api/heckle', {
+      const res = await fetch('/api/structured-heckle', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ joke: input }),
       })
       const data = await res.json()
-      setResult(data.roast)
+      setRoastData(data)
     } catch (error) {
       console.error('Heckle error:', error)
     } finally {
       setLoading(false)
     }
+  }
+
+  const getScoreColor = (score: number) => {
+    if (score >= 8) return 'text-green-400'
+    if (score >= 6) return 'text-yellow-400'
+    if (score >= 4) return 'text-orange-400'
+    return 'text-red-400'
+  }
+
+  const getScoreEmoji = (score: number) => {
+    if (score >= 8) return '🔥'
+    if (score >= 6) return '👍'
+    if (score >= 4) return '😐'
+    return '💀'
   }
 
   return (
@@ -250,9 +285,48 @@ function HeckleBox() {
           '🔥 GET ROASTED'
         )}
       </Button>
-      {result && (
-        <div className="mt-3 sm:mt-4 p-3 sm:p-4 bg-zinc-800/50 rounded-xl border border-zinc-700">
-          <p className="text-xs sm:text-sm text-zinc-300 leading-relaxed">{result}</p>
+      
+      {roastData && (
+        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 space-y-4 animate-in fade-in slide-in-from-top duration-300">
+          {/* Overall Score */}
+          <div className="text-center pb-3 border-b border-zinc-800">
+            <div className="flex items-center justify-center gap-2 mb-2">
+              <span className="text-2xl">{getScoreEmoji(roastData.overall_score)}</span>
+              <span className={`text-2xl font-bold ${getScoreColor(roastData.overall_score)}`}>
+                {roastData.overall_score}/10
+              </span>
+            </div>
+            <p className="text-xs text-zinc-500 uppercase tracking-wide">Overall Comedy Score</p>
+          </div>
+
+          {/* Detailed Breakdown */}
+          <div className="space-y-3">
+            <h4 className="text-sm font-medium text-zinc-300 mb-2">📊 Detailed Analysis</h4>
+            
+            {Object.entries(roastData.breakdown).map(([category, data]: [string, any]) => (
+              <div key={category} className="bg-zinc-800/30 rounded-lg p-3">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-medium text-zinc-400 capitalize">{category}</span>
+                  <span className={`text-sm font-bold ${getScoreColor(data.score)}`}>
+                    {data.score}/10
+                  </span>
+                </div>
+                <p className="text-xs text-zinc-300 leading-relaxed">{data.comment}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* The Roast */}
+          <div className="border-t border-zinc-800 pt-4">
+            <h4 className="text-sm font-medium text-zinc-300 mb-2 flex items-center gap-2">
+              🎤 The Verdict
+            </h4>
+            <div className="bg-red-900/20 border border-red-800/50 rounded-lg p-3">
+              <p className="text-sm text-zinc-300 leading-relaxed italic">
+                "{roastData.roast}"
+              </p>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -12,7 +12,7 @@ export function useJokeStream({ onComplete, onError }: UseJokeStreamOptions = {}
   const { setStreamingTokens, clearStream } = useJokeStore()
 
   const startStream = useCallback(
-    async (query: string, style: string) => {
+    async (query: string, style: string, length?: string) => {
       abortRef.current?.abort()
       const controller = new AbortController()
       abortRef.current = controller
@@ -20,7 +20,16 @@ export function useJokeStream({ onComplete, onError }: UseJokeStreamOptions = {}
       clearStream()
       setStreaming(true)
 
-      const url = `/api/jokes/stream?query=${encodeURIComponent(query)}&style=${encodeURIComponent(style)}`
+      const params = new URLSearchParams({
+        query: query,
+        style: style,
+      })
+      
+      if (length) {
+        params.append('length', length)
+      }
+
+      const url = `/api/jokes/stream?${params.toString()}`
 
       try {
         const res = await fetch(url, {

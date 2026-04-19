@@ -2,6 +2,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { ShareButton } from './ShareButton'
 import { AudioPlayer } from './AudioPlayer'
 import { ScoreBars } from './ScoreBars'
+import { StructuredRoast } from './StructuredRoast'
 import { useSwipe } from '@/hooks/useSwipe'
 import type { JokeResponse } from '@/api/jokes'
 
@@ -27,7 +28,9 @@ export function JokeCard({ joke, onRegenerate, onDelete, showActions = true }: J
               <span className="text-xs px-2 py-1 rounded-full bg-gold-400/10 text-gold-400 border border-gold-400/20">
                 {joke.style || 'Comedy'}
               </span>
-              <h3 className="text-sm font-medium text-zinc-400">{joke.query}</h3>
+              <h3 className="text-sm font-medium text-zinc-400">
+                {joke.query?.replace(/\[api_ninjas\]/gi, '').replace(/\[.*?\]/g, '').trim() || 'Random Joke'}
+              </h3>
             </div>
             {onDelete && (
               <button
@@ -47,9 +50,20 @@ export function JokeCard({ joke, onRegenerate, onDelete, showActions = true }: J
           </p>
 
           {showActions && (
-            <div className="flex items-center gap-2 flex-wrap mb-4">
-              <ShareButton jokeId={joke.id} jokeText={joke.response} />
-              <AudioPlayer jokeId={joke.id} />
+            <div className="space-y-4 mb-4">
+              <div className="flex items-center gap-2 flex-wrap">
+                <ShareButton jokeId={joke.id} jokeText={joke.response} />
+                <AudioPlayer jokeId={joke.id} />
+              </div>
+              
+              {/* Structured Roast */}
+              <StructuredRoast 
+                jokeId={joke.id}
+                jokeText={joke.response}
+                originality={joke.score_originality}
+                timing={joke.score_timing}
+                cleverness={joke.score_cleverness}
+              />
             </div>
           )}
 

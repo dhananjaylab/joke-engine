@@ -37,22 +37,38 @@ PERSONAS: dict[str, str] = {
     ),
 }
 
+LENGTH_INSTRUCTIONS: dict[str, str] = {
+    "one-liner": "Write a single sentence joke. Maximum 20 words. Quick and punchy.",
+    "short": "Write a brief joke in 2-3 sentences. Keep it concise and snappy.",
+    "medium": "Write a good paragraph-length joke with proper setup and punchline. 4-6 sentences.",
+    "long": "Write a full story-style joke with detailed setup, development, and strong punchline. Multiple paragraphs.",
+    "epic": "Write an extended comedy bit with multiple jokes, callbacks, and elaborate storytelling. Go all out.",
+}
 
-async def get_joke(query: str, style: str = "witty") -> str:
+def get_instruction(style: str, length: str = "short") -> str:
+    """Combine style persona with length instruction."""
+    base_persona = PERSONAS.get(style, PERSONAS["witty"])
+    length_guide = LENGTH_INSTRUCTIONS.get(length, LENGTH_INSTRUCTIONS["short"])
+    return f"{base_persona} {length_guide}"
+
+
+async def get_joke(query: str, style: str = "witty", length: str = "short") -> str:
     """Single-shot joke generation. Returns full text."""
-    instruction = PERSONAS.get(style, PERSONAS["witty"])
+    instruction = get_instruction(style, length)
+    max_tokens = {"one-liner": 50, "short": 150, "medium": 300, "long": 500, "epic": 800}.get(length, 150)
+    
     start = time.perf_counter()
     await log.info(
         "ai_joke_start",
-        f"Generating joke: query={query!r} style={style}",
-        details={"query": query, "style": style, "model": "gpt-4o-mini"},
+        f"Generating joke: query={query!r} style={style} length={length}",
+        details={"query": query, "style": style, "length": length, "model": "gpt-4o-mini"},
     )
     try:
         result = await client.chat.completions.create(
             model="gpt-4o-mini",
             n=1,
             temperature=0.65,
-            max_tokens=200,
+            max_tokens=max_tokens,
             messages=[
                 {"role": "system", "content": instruction},
                 {"role": "user", "content": f"Topic: {query}"},
@@ -66,6 +82,7 @@ async def get_joke(query: str, style: str = "witty") -> str:
             details={
                 "query": query,
                 "style": style,
+                "length": length,
                 "tokens_used": result.usage.total_tokens if result.usage else None,
                 "preview": text[:80],
             },
@@ -77,30 +94,32 @@ async def get_joke(query: str, style: str = "witty") -> str:
         await log.error(
             "ai_joke_failed",
             f"OpenAI joke generation failed for query={query!r}",
-            details={"query": query, "style": style},
+            details={"query": query, "style": style, "length": length},
             duration_ms=duration_ms,
             exc=exc,
         )
         raise
 
 
-async def stream_joke(query: str, style: str = "witty"):
+async def stream_joke(query: str, style: str = "witty", length: str = "short"):
     """Async generator yielding SSE-formatted token chunks."""
-    instruction = PERSONAS.get(style, PERSONAS["witty"])
+    instruction = get_instruction(style, length)
+    max_tokens = {"one-liner": 50, "short": 150, "medium": 300, "long": 500, "epic": 800}.get(length, 150)
+    
     start = time.perf_counter()
     token_count = 0
 
     await log.info(
         "ai_stream_start",
-        f"Starting SSE stream: query={query!r} style={style}",
-        details={"query": query, "style": style},
+        f"Starting SSE stream: query={query!r} style={style} length={length}",
+        details={"query": query, "style": style, "length": length},
     )
     try:
         stream = await client.chat.completions.create(
             model="gpt-4o-mini",
             stream=True,
             temperature=0.65,
-            max_tokens=200,
+            max_tokens=max_tokens,
             messages=[
                 {"role": "system", "content": instruction},
                 {"role": "user", "content": f"Topic: {query}"},
@@ -117,7 +136,7 @@ async def stream_joke(query: str, style: str = "witty"):
         await log.info(
             "ai_stream_complete",
             f"SSE stream finished in {duration_ms}ms ({token_count} chunks)",
-            details={"query": query, "style": style, "chunks": token_count},
+            details={"query": query, "style": style, "length": length, "chunks": token_count},
             duration_ms=duration_ms,
         )
     except Exception as exc:
@@ -125,7 +144,7 @@ async def stream_joke(query: str, style: str = "witty"):
         await log.error(
             "ai_stream_failed",
             f"SSE stream failed for query={query!r}",
-            details={"query": query, "style": style},
+            details={"query": query, "style": style, "length": length},
             duration_ms=duration_ms,
             exc=exc,
         )
@@ -171,6 +190,75 @@ async def heckle(user_joke: str) -> str:
             "ai_heckle_failed",
             "Heckle generation failed",
             details={"provider": provider},
+            duration_ms=duration_ms,
+            exc=exc,
+        )
+        raise
+
+
+async def structured_roast(joke_text: str, originality: float, timing: float, cleverness: float) -> dict:
+    """Generate a structured roast with detailed breakdown using existing scores."""
+    start = time.perf_counter()
+    await log.info(
+        "ai_structured_roast_start", 
+        "Structured roast request", 
+        details={
+            "preview": joke_text[:80],
+            "scores": {"originality": originality, "timing": timing, "cleverness": cleverness}
+        }
+    )
+    
+    overall_score = round((originality + timing + cleverness) / 3, 1)
+    
+    try:
+        result = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            temperature=0.8,
+            max_tokens=400,
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": f"""
+You are a brutally honest comedy critic. Analyze this joke and provide a structured roast.
+
+The joke has already been scored:
+- Originality: {originality}/10
+- Timing: {timing}/10  
+- Cleverness: {cleverness}/10
+- Overall: {overall_score}/10
+
+Provide a JSON response with:
+{{
+  "overall_score": {overall_score},
+  "breakdown": {{
+    "originality": {{"score": {originality}, "comment": "specific critique about originality"}},
+    "timing": {{"score": {timing}, "comment": "specific critique about timing/delivery"}},
+    "cleverness": {{"score": {cleverness}, "comment": "specific critique about cleverness/wit"}}
+  }},
+  "roast": "A witty, sarcastic overall roast of the joke that's funny but not cruel. Reference the scores."
+}}
+
+Be funny, sarcastic, but constructive. Make the roast entertaining to read.
+"""},
+                {"role": "user", "content": f"Joke to roast: {joke_text}"},
+            ],
+        )
+        
+        roast_data = json.loads(result.choices[0].message.content)
+        duration_ms = int((time.perf_counter() - start) * 1000)
+        
+        await log.info(
+            "ai_structured_roast_complete",
+            f"Structured roast generated in {duration_ms}ms",
+            details={"overall_score": roast_data.get("overall_score")},
+            duration_ms=duration_ms,
+        )
+        return roast_data
+        
+    except Exception as exc:
+        duration_ms = int((time.perf_counter() - start) * 1000)
+        await log.error(
+            "ai_structured_roast_failed",
+            "Structured roast generation failed",
             duration_ms=duration_ms,
             exc=exc,
         )

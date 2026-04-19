@@ -106,6 +106,7 @@ async def generate_joke(
 async def stream_joke_sse(
     query: str = Query(..., max_length=100),
     style: str = Query("witty"),
+    length: str = Query("short"),
     db: AsyncSession = Depends(get_db),
 ):
     """SSE endpoint — streams tokens then saves the completed joke."""
@@ -116,19 +117,19 @@ async def stream_joke_sse(
 
         await log.info(
             "joke_stream_start",
-            f"SSE stream started: query={query!r} style={style}",
-            details={"query": query, "style": style},
+            f"SSE stream started: query={query!r} style={style} length={length}",
+            details={"query": query, "style": style, "length": length},
         )
 
         try:
-            async for chunk in ai.stream_joke(query, style):
+            async for chunk in ai.stream_joke(query, style, length):
                 tokens.append(chunk)
                 yield chunk
         except Exception as exc:
             await log.error(
                 "joke_stream_error",
                 "SSE stream encountered an error",
-                details={"query": query, "style": style},
+                details={"query": query, "style": style, "length": length},
                 exc=exc,
             )
             return
@@ -141,7 +142,7 @@ async def stream_joke_sse(
             .strip()
         )
         if full_text:
-            composite = f"{query.strip()} [{style}]"
+            composite = f"{query.strip()} [{style}] [{length}]"
             new_joke = await save_joke(
                 db,
                 query=composite,
@@ -353,16 +354,51 @@ async def get_joke_by_id(joke_id: int, db: AsyncSession = Depends(get_db)):
     return joke
 
 
-@router.post("/{joke_id}/heckle")
-async def heckle_joke(joke_id: int, db: AsyncSession = Depends(get_db)):
+@router.post("/{joke_id}/structured-roast")
+async def structured_roast_joke(joke_id: int, body: dict, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Joke).where(Joke.id == joke_id))
     joke = result.scalar_one_or_none()
     if not joke:
-        await log.warning("heckle_joke_not_found", f"Heckle requested for non-existent joke {joke_id}", joke_id=joke_id)
+        await log.warning("structured_roast_joke_not_found", f"Structured roast requested for non-existent joke {joke_id}", joke_id=joke_id)
         raise HTTPException(status_code=404, detail=_JOKE_NOT_FOUND)
-    await log.info("heckle_request", f"Heckle requested for joke {joke_id}", joke_id=joke_id)
-    roast = await ai.heckle(joke.response)
-    return {"roast": roast}
+    
+    await log.info("structured_roast_request", f"Structured roast requested for joke {joke_id}", joke_id=joke_id)
+    
+    # Use existing scores if available, otherwise generate new ones
+    existing_scores = body.get('existing_scores', {})
+    
+    # Check if we have existing scores in the database
+    originality = joke.score_originality
+    timing = joke.score_timing
+    cleverness = joke.score_cleverness
+    
+    # If no scores exist, generate them using AI
+    if not all([originality, timing, cleverness]):
+        await log.info("generating_missing_scores", f"Generating missing scores for joke {joke_id}", joke_id=joke_id)
+        scores = await ai.score_joke(joke.response)
+        if scores:
+            originality = scores.get('originality', 5)
+            timing = scores.get('timing', 5) 
+            cleverness = scores.get('cleverness', 5)
+            
+            # Update the joke with the new scores
+            joke.score_originality = originality
+            joke.score_timing = timing
+            joke.score_cleverness = cleverness
+            await db.commit()
+        else:
+            # Fallback to default scores if AI scoring fails
+            originality = existing_scores.get('originality', 5)
+            timing = existing_scores.get('timing', 5)
+            cleverness = existing_scores.get('cleverness', 5)
+    
+    structured_roast = await ai.structured_roast(
+        joke.response, 
+        originality, 
+        timing, 
+        cleverness
+    )
+    return structured_roast
 
 
 @router.post("/{joke_id}/explain")
