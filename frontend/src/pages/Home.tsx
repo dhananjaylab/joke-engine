@@ -8,6 +8,7 @@ import { triggerConfetti } from '@/lib/confetti'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { jokeApi } from '@/api/jokes'
+import type { JokeResponse } from '@/api/jokes'
 
 export default function Home() {
   const [query, setQuery] = useState('')
@@ -240,18 +241,16 @@ function HeckleBox() {
 }
 
 function RandomJokesBox() {
-  const [jokes, setJokes] = useState<string[]>([])
+  const [joke, setJoke] = useState<JokeResponse | null>(null)
   const [loading, setLoading] = useState(false)
-  const [currentIndex, setCurrentIndex] = useState(0)
   const [flipped, setFlipped] = useState(false)
 
-  const fetchJokes = async () => {
+  const fetchJoke = async () => {
     setLoading(true)
     setFlipped(false)
     try {
-      const data = await jokeApi.randomJokes(1)
-      setJokes(data.jokes)
-      setCurrentIndex(0)
+      const data = await jokeApi.randomJokes()
+      setJoke(data)
     } catch (error) {
       console.error('Random joke error:', error)
     } finally {
@@ -263,11 +262,9 @@ function RandomJokesBox() {
     setFlipped(true)
     setTimeout(async () => {
       setFlipped(false)
-      await fetchJokes()
+      await fetchJoke()
     }, 200)
   }
-
-  const currentJoke = jokes[currentIndex] ?? null
 
   return (
     <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-4 sm:p-6 space-y-3 sm:space-y-4 flex flex-col">
@@ -287,7 +284,7 @@ function RandomJokesBox() {
 
       {/* Joke display */}
       <div className="flex-1 min-h-[80px] flex items-center">
-        {!currentJoke && !loading && (
+        {!joke && !loading && (
           <p className="text-zinc-500 text-sm italic">Hit the button to get a random joke ↓</p>
         )}
         {loading && (
@@ -297,20 +294,20 @@ function RandomJokesBox() {
             <div className="h-3 bg-zinc-800 rounded w-3/5"></div>
           </div>
         )}
-        {currentJoke && !loading && (
+        {joke && !loading && (
           <p
             className="text-white text-sm sm:text-base leading-relaxed transition-opacity duration-200"
             style={{ opacity: flipped ? 0 : 1 }}
           >
-            {currentJoke}
+            {joke.response}
           </p>
         )}
       </div>
 
       <div className="flex gap-2 pt-1">
-        {!currentJoke ? (
+        {!joke ? (
           <Button
-            onClick={fetchJokes}
+            onClick={fetchJoke}
             disabled={loading}
             className="flex-1 bg-gold-400 hover:bg-gold-500 text-black font-semibold rounded-xl h-10 sm:h-11 text-sm sm:text-base"
           >
@@ -326,7 +323,7 @@ function RandomJokesBox() {
               {loading ? <span className="animate-pulse">…</span> : '🔀 Another One'}
             </Button>
             <button
-              onClick={() => navigator.clipboard?.writeText(currentJoke)}
+              onClick={() => navigator.clipboard?.writeText(joke.response)}
               title="Copy joke"
               className="px-3 h-10 sm:h-11 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-400 hover:text-white transition-colors"
             >

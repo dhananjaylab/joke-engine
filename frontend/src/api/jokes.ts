@@ -4,6 +4,8 @@ export interface JokeResponse {
   id: number
   query: string
   response: string
+  source: string
+  session_key: string | null
   created_at: string
   share_count: number
   audio_url: string | null
@@ -51,5 +53,5 @@ export const jokeApi = {
     api.get<{ joke: string }>('/api/jokes/joke-of-the-day').then(r => r.data),
 
   randomJokes: (count = 1) =>
-    api.get<{ jokes: string[] }>(`/api/jokes/random?count=${count}`).then(r => r.data),
+    api.get<JokeResponse>(`/api/jokes/random`).then(r => r.data),
 }

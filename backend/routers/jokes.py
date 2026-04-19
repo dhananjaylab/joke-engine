@@ -1,6 +1,7 @@
 import time
 import asyncio
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,40 +12,19 @@ from core.logging import get_logger
 from models.joke import Joke
 from schemas.joke import GenerateRequest, JokeResponse, PaginatedJokes
 from services import ai
+from services.joke_store import save_joke
 from dependencies.profile import get_profile
 from models.profile import UserProfile
-
-# ARQ imports
-from arq import create_pool
-from arq.connections import RedisSettings
 from core.config import get_settings
-from workers.fallback import score_joke_sync
 
 router = APIRouter(prefix="/api/jokes", tags=["jokes"])
 _settings = get_settings()
 log = get_logger("routers.jokes")
 
+_JOKE_NOT_FOUND = "Joke not found"
 
-async def _enqueue_score(joke_id: int):
-    """Enqueue background scoring task with fallback."""
-    try:
-        pool = await create_pool(RedisSettings.from_dsn(_settings.redis_url))
-        await pool.enqueue_job("task_score_joke", joke_id)
-        await pool.close(close_connection_pool=True)
-        await log.info(
-            "score_enqueued",
-            f"Scoring task enqueued for joke {joke_id}",
-            joke_id=joke_id,
-        )
-    except Exception as exc:
-        await log.warning(
-            "score_enqueue_failed",
-            f"ARQ enqueue failed for joke {joke_id} — using fallback",
-            joke_id=joke_id,
-            exc=exc,
-        )
-        asyncio.create_task(score_joke_sync(joke_id))
 
+# ── Generate (single-shot AI) ─────────────────────────────────────────────────
 
 @router.post("/generate", response_model=JokeResponse)
 async def generate_joke(
@@ -63,7 +43,7 @@ async def generate_joke(
         session_key=session_key,
     )
 
-    # Cache lookup
+    # Cache lookup (skip on regenerate)
     if not body.regenerate:
         result = await db.execute(
             select(Joke).where(func.lower(Joke.query) == composite_query.lower())
@@ -81,7 +61,7 @@ async def generate_joke(
             )
             return existing
 
-    # Generate new joke
+    # Generate via AI
     try:
         joke_text = await ai.get_joke(body.query.strip(), body.style)
     except Exception as exc:
@@ -96,10 +76,14 @@ async def generate_joke(
         )
         raise HTTPException(status_code=503, detail="AI service unavailable")
 
-    new_joke = Joke(query=composite_query, response=joke_text)
-    db.add(new_joke)
-    await db.flush()
-    await db.refresh(new_joke)
+    # Persist via central store
+    new_joke = await save_joke(
+        db,
+        query=composite_query,
+        response=joke_text,
+        source="ai_generated",
+        session_key=session_key,
+    )
 
     profile.xp += 5
     await db.commit()
@@ -113,10 +97,10 @@ async def generate_joke(
         duration_ms=duration_ms,
         details={"query": composite_query, "xp_awarded": 5, "new_xp": profile.xp},
     )
-
-    asyncio.create_task(_enqueue_score(new_joke.id))
     return new_joke
 
+
+# ── Stream (SSE) ──────────────────────────────────────────────────────────────
 
 @router.get("/stream")
 async def stream_joke_sse(
@@ -149,7 +133,6 @@ async def stream_joke_sse(
             )
             return
 
-        # Save completed joke after stream ends
         full_text = (
             "".join(tokens)
             .replace("data: ", "")
@@ -159,12 +142,12 @@ async def stream_joke_sse(
         )
         if full_text:
             composite = f"{query.strip()} [{style}]"
-            new_joke = Joke(query=composite, response=full_text)
-            db.add(new_joke)
-            await db.flush()
-            await db.refresh(new_joke)
-            await db.commit()
-
+            new_joke = await save_joke(
+                db,
+                query=composite,
+                response=full_text,
+                source="ai_streamed",
+            )
             duration_ms = int((time.perf_counter() - start) * 1000)
             await log.info(
                 "joke_stream_saved",
@@ -173,7 +156,6 @@ async def stream_joke_sse(
                 duration_ms=duration_ms,
                 details={"query": composite, "text_length": len(full_text)},
             )
-            asyncio.create_task(_enqueue_score(new_joke.id))
 
     return StreamingResponse(
         event_generator(),
@@ -186,20 +168,27 @@ async def stream_joke_sse(
     )
 
 
+# ── History ───────────────────────────────────────────────────────────────────
+
 @router.get("/history", response_model=PaginatedJokes)
 async def get_history(
     page: int = Query(1, ge=1),
     page_size: int = Query(8, ge=1, le=50),
+    source: str = Query(None, description="Filter by source (e.g. api_ninjas_random)"),
     db: AsyncSession = Depends(get_db),
 ):
     start = time.perf_counter()
     offset = (page - 1) * page_size
 
-    total_result = await db.execute(select(func.count(Joke.id)))
+    base_q = select(Joke)
+    if source:
+        base_q = base_q.where(Joke.source == source)
+
+    total_result = await db.execute(select(func.count()).select_from(base_q.subquery()))
     total = total_result.scalar_one()
 
     jokes_result = await db.execute(
-        select(Joke).order_by(Joke.created_at.desc()).offset(offset).limit(page_size)
+        base_q.order_by(Joke.created_at.desc()).offset(offset).limit(page_size)
     )
     jokes = jokes_result.scalars().all()
 
@@ -208,7 +197,7 @@ async def get_history(
         "joke_history_fetched",
         f"History page {page} fetched: {len(jokes)}/{total} jokes",
         duration_ms=duration_ms,
-        details={"page": page, "page_size": page_size, "total": total},
+        details={"page": page, "page_size": page_size, "total": total, "source_filter": source},
     )
 
     return PaginatedJokes(
@@ -219,30 +208,26 @@ async def get_history(
     )
 
 
-@router.get("/random")
-async def get_random_jokes(
-    count: int = Query(1, ge=1, le=10, description="Number of random jokes to return (1–10)"),
+# ── Random (API Ninjas) ───────────────────────────────────────────────────────
+
+@router.get("/random", response_model=JokeResponse)
+async def get_random_joke(
+    db: AsyncSession = Depends(get_db),
 ):
     """
-    Fetch random jokes from API Ninjas /v1/jokes.
-    Free tier returns 1 joke regardless of count; premium supports up to 100.
+    Fetch one random joke from API Ninjas /v1/jokes, persist it to Neon DB,
+    and return the full JokeResponse (with id, source, scores, etc.).
+    Free tier always returns 1 joke.
     """
     start = time.perf_counter()
-    await log.info(
-        "random_joke_request",
-        f"Random joke requested (count={count})",
-        details={"count": count},
-    )
+    await log.info("random_joke_request", "Random joke requested")
 
     if not _settings.api_ninjas_key:
         await log.error("random_joke_no_key", "API Ninjas key not configured")
         raise HTTPException(status_code=503, detail="API Ninjas key not configured")
 
     try:
-        import httpx as _httpx
-        async with _httpx.AsyncClient() as client:
-            # Free tier rejects the `limit` param with 400 — omit it entirely.
-            # The endpoint always returns 1 joke on the free plan.
+        async with httpx.AsyncClient() as client:
             response = await client.get(
                 "https://api.api-ninjas.com/v1/jokes",
                 headers={"X-Api-Key": _settings.api_ninjas_key},
@@ -251,32 +236,50 @@ async def get_random_jokes(
             response.raise_for_status()
             data = response.json()
 
-        jokes = [item["joke"] for item in data if "joke" in item]
-        duration_ms = int((time.perf_counter() - start) * 1000)
-        await log.info(
-            "random_joke_served",
-            f"Returned {len(jokes)} random joke(s) in {duration_ms}ms",
-            duration_ms=duration_ms,
-            details={"count_requested": count, "count_returned": len(jokes)},
-        )
-        return {"jokes": jokes}
+        if not data or "joke" not in data[0]:
+            raise ValueError("Empty response from API Ninjas")
+
+        joke_text = data[0]["joke"]
 
     except Exception as exc:
         duration_ms = int((time.perf_counter() - start) * 1000)
         await log.error(
-            "random_joke_failed",
-            "Failed to fetch random jokes from API Ninjas",
+            "random_joke_fetch_failed",
+            "Failed to fetch random joke from API Ninjas",
             duration_ms=duration_ms,
             exc=exc,
         )
-        raise HTTPException(status_code=503, detail="Failed to fetch random jokes")
+        raise HTTPException(status_code=503, detail="Failed to fetch random joke")
 
+    # Persist to Neon DB
+    new_joke = await save_joke(
+        db,
+        query="random [api_ninjas]",
+        response=joke_text,
+        source="api_ninjas_random",
+        session_key=None,
+        enqueue_scoring=True,
+    )
+
+    duration_ms = int((time.perf_counter() - start) * 1000)
+    await log.info(
+        "random_joke_saved",
+        f"Random joke fetched and saved: id={new_joke.id} in {duration_ms}ms",
+        joke_id=new_joke.id,
+        duration_ms=duration_ms,
+        details={"preview": joke_text[:80]},
+    )
+    return new_joke
+
+
+# ── Joke of the Day ───────────────────────────────────────────────────────────
 
 @router.get("/joke-of-the-day")
 async def get_joke_of_the_day(db: AsyncSession = Depends(get_db)):
     """
-    Get the joke of the day. Fetches from API Ninjas once per day (UTC timezone)
-    and caches in database for all users.
+    Get the joke of the day. Fetches from API Ninjas once per day (UTC),
+    caches in daily_jokes table, and also mirrors into the jokes table
+    so it appears in history and gets AI-scored.
     """
     from services.daily_joke import get_or_fetch_daily_joke
 
@@ -284,14 +287,32 @@ async def get_joke_of_the_day(db: AsyncSession = Depends(get_db)):
     await log.info("jotd_request", "Joke-of-the-day requested")
 
     try:
-        joke_text = await get_or_fetch_daily_joke(db)
+        joke_text, is_new = await get_or_fetch_daily_joke(db)
         duration_ms = int((time.perf_counter() - start) * 1000)
+
+        # Mirror into jokes table only when freshly fetched (not on cache hits)
+        if is_new:
+            await save_joke(
+                db,
+                query="joke of the day [api_ninjas]",
+                response=joke_text,
+                source="api_ninjas_daily",
+                session_key=None,
+                enqueue_scoring=True,
+            )
+            await log.info(
+                "jotd_mirrored",
+                "Joke-of-the-day mirrored into jokes table",
+                duration_ms=duration_ms,
+            )
+
         await log.info(
             "jotd_served",
-            f"Joke-of-the-day served in {duration_ms}ms",
+            f"Joke-of-the-day served in {duration_ms}ms (new={is_new})",
             duration_ms=duration_ms,
         )
         return {"joke": joke_text}
+
     except Exception as exc:
         duration_ms = int((time.perf_counter() - start) * 1000)
         await log.error(
@@ -306,13 +327,15 @@ async def get_joke_of_the_day(db: AsyncSession = Depends(get_db)):
         )
 
 
+# ── CRUD ──────────────────────────────────────────────────────────────────────
+
 @router.delete("/{joke_id}", status_code=204)
 async def delete_joke(joke_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Joke).where(Joke.id == joke_id))
     joke = result.scalar_one_or_none()
     if not joke:
         await log.warning("joke_delete_not_found", f"Delete requested for non-existent joke {joke_id}", joke_id=joke_id)
-        raise HTTPException(status_code=404, detail="Joke not found")
+        raise HTTPException(status_code=404, detail=_JOKE_NOT_FOUND)
     await db.delete(joke)
     await log.info("joke_deleted", f"Joke {joke_id} deleted", joke_id=joke_id)
 
@@ -323,7 +346,7 @@ async def get_joke_by_id(joke_id: int, db: AsyncSession = Depends(get_db)):
     joke = result.scalar_one_or_none()
     if not joke:
         await log.warning("joke_not_found", f"Joke {joke_id} not found", joke_id=joke_id)
-        raise HTTPException(status_code=404, detail="Joke not found")
+        raise HTTPException(status_code=404, detail=_JOKE_NOT_FOUND)
     await log.debug("joke_fetched", f"Joke {joke_id} fetched", joke_id=joke_id)
     return joke
 
@@ -334,7 +357,7 @@ async def heckle_joke(joke_id: int, db: AsyncSession = Depends(get_db)):
     joke = result.scalar_one_or_none()
     if not joke:
         await log.warning("heckle_joke_not_found", f"Heckle requested for non-existent joke {joke_id}", joke_id=joke_id)
-        raise HTTPException(status_code=404, detail="Joke not found")
+        raise HTTPException(status_code=404, detail=_JOKE_NOT_FOUND)
     await log.info("heckle_request", f"Heckle requested for joke {joke_id}", joke_id=joke_id)
     roast = await ai.heckle(joke.response)
     return {"roast": roast}
@@ -346,7 +369,7 @@ async def explain_joke(joke_id: int, db: AsyncSession = Depends(get_db)):
     joke = result.scalar_one_or_none()
     if not joke:
         await log.warning("explain_joke_not_found", f"Explain requested for non-existent joke {joke_id}", joke_id=joke_id)
-        raise HTTPException(status_code=404, detail="Joke not found")
+        raise HTTPException(status_code=404, detail=_JOKE_NOT_FOUND)
     await log.info("explain_request", f"Explain requested for joke {joke_id}", joke_id=joke_id)
     explanation = await ai.explain(joke.response)
     return {"explanation": explanation}

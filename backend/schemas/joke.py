@@ -15,6 +15,8 @@ class JokeResponse(BaseModel):
     id: int
     query: str
     response: str
+    source: str
+    session_key: Optional[str]
     created_at: datetime
     share_count: int
     audio_url: Optional[str]

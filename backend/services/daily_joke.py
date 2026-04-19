@@ -15,10 +15,14 @@ openai_client = AsyncOpenAI(api_key=settings.openai_api_key)
 log = get_logger("services.daily_joke")
 
 
-async def get_or_fetch_daily_joke(db: AsyncSession) -> str:
+async def get_or_fetch_daily_joke(db: AsyncSession) -> tuple[str, bool]:
     """
     Get today's joke from database, or fetch from API Ninjas if not cached.
     Uses UTC timezone to determine the current date.
+
+    Returns
+    -------
+    (joke_text, is_new) — is_new=True when freshly fetched from the API.
     """
     today = datetime.now(timezone.utc).date()
 
@@ -34,7 +38,7 @@ async def get_or_fetch_daily_joke(db: AsyncSession) -> str:
             f"Daily joke cache hit for {today}",
             details={"date": str(today), "source": daily_joke.source},
         )
-        return daily_joke.joke_text
+        return daily_joke.joke_text, False
 
     # Not in cache — fetch from API Ninjas
     await log.info("jotd_cache_miss", f"Daily joke cache miss for {today} — fetching from API Ninjas", details={"date": str(today)})
@@ -54,7 +58,7 @@ async def get_or_fetch_daily_joke(db: AsyncSession) -> str:
         await log.warning("jotd_enhance_failed", "Emoji enhancement failed — using raw joke", exc=exc)
         enhanced_joke = raw_joke
 
-    # Store in database
+    # Store in daily_jokes cache table
     new_daily_joke = DailyJoke(
         joke_date=today,
         joke_text=enhanced_joke,
@@ -70,7 +74,7 @@ async def get_or_fetch_daily_joke(db: AsyncSession) -> str:
         duration_ms=duration_ms,
         details={"date": str(today), "preview": enhanced_joke[:80]},
     )
-    return enhanced_joke
+    return enhanced_joke, True
 
 
 async def fetch_joke_from_api() -> str:
