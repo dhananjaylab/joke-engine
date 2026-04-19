@@ -160,8 +160,6 @@ export default function Home() {
         <RandomJokesBox />
       </div>
 
-      {/* Top Rated — full width below */}
-      <TopRatedBox />
     </div>
   )
 }
@@ -328,31 +326,4 @@ function RandomJokesBox() {
   )
 }
 
-function TopRatedBox() {  return (
-    <div className="bg-gradient-to-br from-zinc-900 to-zinc-900/50 border border-zinc-800 rounded-2xl p-4 sm:p-6 space-y-3 sm:space-y-4 relative overflow-hidden">
-      {/* Microphone Icon */}
-      <div className="flex justify-center mb-3 sm:mb-4">
-        <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-gold-400/20 to-gold-600/20 flex items-center justify-center">
-          <svg className="w-10 h-10 sm:w-12 sm:h-12 text-gold-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-          </svg>
-        </div>
-      </div>
 
-      <div className="space-y-1.5 sm:space-y-2">
-        <div className="text-[10px] sm:text-xs text-gold-400 font-semibold uppercase tracking-wide">Top Rated</div>
-        <h3 className="text-lg sm:text-xl font-bold text-white">The AI Standup Special</h3>
-        <p className="text-xs sm:text-sm text-zinc-400">
-          Watch the highest-rated generated sets of the week, curated globally.
-        </p>
-      </div>
-
-      <button className="flex items-center gap-2 text-gold-400 hover:text-gold-300 font-semibold transition-colors group text-sm sm:text-base">
-        <span>Watch Now</span>
-        <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-        </svg>
-      </button>
-    </div>
-  )
-}
