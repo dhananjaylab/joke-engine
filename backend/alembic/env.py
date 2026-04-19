@@ -7,7 +7,7 @@ from alembic import context
 
 # Import all models so Alembic can detect them
 from core.database import Base
-from models import joke, profile  # noqa: F401
+from models import joke, profile, app_log  # noqa: F401
 
 config = context.config
 
