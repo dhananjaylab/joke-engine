@@ -5,6 +5,7 @@ import { useJokeStore } from '@/store/jokeStore'
 import { useProfileStore } from '@/store/profileStore'
 import { StyleSelect } from '@/components/StyleSelect'
 import { TrendChips } from '@/components/TrendChips'
+import { VoicePlayer } from '@/components/VoicePlayer'
 import { triggerConfetti } from '@/lib/confetti'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -164,11 +165,21 @@ export default function Home() {
 
       {/* Streaming Result */}
       {(currentStream.streaming || streamingTokens) && (
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-4 sm:p-6 min-h-[100px] sm:min-h-[120px]">
+        <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-4 sm:p-6 min-h-[100px] sm:min-h-[120px] space-y-4">
           <p className="text-white text-base sm:text-lg leading-relaxed">
             {streamingTokens}
             {currentStream.streaming && <span className="animate-pulse ml-1">▍</span>}
           </p>
+          
+          {/* Voice Player - Show only when streaming is complete and we have content */}
+          {!currentStream.streaming && streamingTokens && streamingTokens.trim().length > 10 && (
+            <div className="border-t border-zinc-800 pt-4">
+              <VoicePlayer 
+                text={streamingTokens} 
+                jokeStyle={currentStyle}
+              />
+            </div>
+          )}
         </div>
       )}
 
@@ -298,12 +309,24 @@ function RandomJokesBox() {
           </div>
         )}
         {joke && !loading && (
-          <p
-            className="text-white text-sm sm:text-base leading-relaxed transition-opacity duration-200"
-            style={{ opacity: flipped ? 0 : 1 }}
-          >
-            {joke.response}
-          </p>
+          <div className="w-full space-y-3">
+            <p
+              className="text-white text-sm sm:text-base leading-relaxed transition-opacity duration-200"
+              style={{ opacity: flipped ? 0 : 1 }}
+            >
+              {joke.response}
+            </p>
+            
+            {/* Voice Player for Random Jokes */}
+            {!flipped && (
+              <div className="border-t border-zinc-800 pt-3">
+                <VoicePlayer 
+                  text={joke.response} 
+                  jokeStyle="comedian"
+                />
+              </div>
+            )}
+          </div>
         )}
       </div>
 
