@@ -49,4 +49,7 @@ export const jokeApi = {
 
   jokeOfTheDay: () =>
     api.get<{ joke: string }>('/api/jokes/joke-of-the-day').then(r => r.data),
+
+  randomJokes: (count = 1) =>
+    api.get<{ jokes: string[] }>(`/api/jokes/random?count=${count}`).then(r => r.data),
 }

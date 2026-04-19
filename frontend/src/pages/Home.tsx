@@ -166,9 +166,12 @@ export default function Home() {
         {/* Reverse Heckler */}
         <HeckleBox />
 
-        {/* Top Rated */}
-        <TopRatedBox />
+        {/* Random Jokes */}
+        <RandomJokesBox />
       </div>
+
+      {/* Top Rated — full width below */}
+      <TopRatedBox />
     </div>
   )
 }
@@ -236,8 +239,110 @@ function HeckleBox() {
   )
 }
 
-function TopRatedBox() {
+function RandomJokesBox() {
+  const [jokes, setJokes] = useState<string[]>([])
+  const [loading, setLoading] = useState(false)
+  const [currentIndex, setCurrentIndex] = useState(0)
+  const [flipped, setFlipped] = useState(false)
+
+  const fetchJokes = async () => {
+    setLoading(true)
+    setFlipped(false)
+    try {
+      const data = await jokeApi.randomJokes(1)
+      setJokes(data.jokes)
+      setCurrentIndex(0)
+    } catch (error) {
+      console.error('Random joke error:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleNext = async () => {
+    setFlipped(true)
+    setTimeout(async () => {
+      setFlipped(false)
+      await fetchJokes()
+    }, 200)
+  }
+
+  const currentJoke = jokes[currentIndex] ?? null
+
   return (
+    <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-4 sm:p-6 space-y-3 sm:space-y-4 flex flex-col">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-xl sm:text-2xl">🎲</span>
+          <h3 className="text-base sm:text-lg font-bold text-white">Random Joke</h3>
+        </div>
+        <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-400 uppercase tracking-wide">
+          API Ninjas
+        </span>
+      </div>
+
+      <p className="text-xs sm:text-sm text-zinc-400">
+        Pull a fresh joke from the API Ninjas vault — no AI, just pure human comedy.
+      </p>
+
+      {/* Joke display */}
+      <div className="flex-1 min-h-[80px] flex items-center">
+        {!currentJoke && !loading && (
+          <p className="text-zinc-500 text-sm italic">Hit the button to get a random joke ↓</p>
+        )}
+        {loading && (
+          <div className="w-full space-y-2 animate-pulse">
+            <div className="h-3 bg-zinc-800 rounded w-full"></div>
+            <div className="h-3 bg-zinc-800 rounded w-4/5"></div>
+            <div className="h-3 bg-zinc-800 rounded w-3/5"></div>
+          </div>
+        )}
+        {currentJoke && !loading && (
+          <p
+            className="text-white text-sm sm:text-base leading-relaxed transition-opacity duration-200"
+            style={{ opacity: flipped ? 0 : 1 }}
+          >
+            {currentJoke}
+          </p>
+        )}
+      </div>
+
+      <div className="flex gap-2 pt-1">
+        {!currentJoke ? (
+          <Button
+            onClick={fetchJokes}
+            disabled={loading}
+            className="flex-1 bg-gold-400 hover:bg-gold-500 text-black font-semibold rounded-xl h-10 sm:h-11 text-sm sm:text-base"
+          >
+            {loading ? <span className="animate-pulse">Loading…</span> : '🎲 Get Random Joke'}
+          </Button>
+        ) : (
+          <>
+            <Button
+              onClick={handleNext}
+              disabled={loading}
+              className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white font-semibold rounded-xl h-10 sm:h-11 text-sm border border-zinc-700"
+            >
+              {loading ? <span className="animate-pulse">…</span> : '🔀 Another One'}
+            </Button>
+            <button
+              onClick={() => navigator.clipboard?.writeText(currentJoke)}
+              title="Copy joke"
+              className="px-3 h-10 sm:h-11 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-400 hover:text-white transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function TopRatedBox() {  return (
     <div className="bg-gradient-to-br from-zinc-900 to-zinc-900/50 border border-zinc-800 rounded-2xl p-4 sm:p-6 space-y-3 sm:space-y-4 relative overflow-hidden">
       {/* Microphone Icon */}
       <div className="flex justify-center mb-3 sm:mb-4">

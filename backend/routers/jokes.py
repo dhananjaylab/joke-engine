@@ -219,6 +219,59 @@ async def get_history(
     )
 
 
+@router.get("/random")
+async def get_random_jokes(
+    count: int = Query(1, ge=1, le=10, description="Number of random jokes to return (1–10)"),
+):
+    """
+    Fetch random jokes from API Ninjas /v1/jokes.
+    Free tier returns 1 joke regardless of count; premium supports up to 100.
+    """
+    start = time.perf_counter()
+    await log.info(
+        "random_joke_request",
+        f"Random joke requested (count={count})",
+        details={"count": count},
+    )
+
+    if not _settings.api_ninjas_key:
+        await log.error("random_joke_no_key", "API Ninjas key not configured")
+        raise HTTPException(status_code=503, detail="API Ninjas key not configured")
+
+    try:
+        import httpx as _httpx
+        async with _httpx.AsyncClient() as client:
+            # Free tier rejects the `limit` param with 400 — omit it entirely.
+            # The endpoint always returns 1 joke on the free plan.
+            response = await client.get(
+                "https://api.api-ninjas.com/v1/jokes",
+                headers={"X-Api-Key": _settings.api_ninjas_key},
+                timeout=10.0,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+        jokes = [item["joke"] for item in data if "joke" in item]
+        duration_ms = int((time.perf_counter() - start) * 1000)
+        await log.info(
+            "random_joke_served",
+            f"Returned {len(jokes)} random joke(s) in {duration_ms}ms",
+            duration_ms=duration_ms,
+            details={"count_requested": count, "count_returned": len(jokes)},
+        )
+        return {"jokes": jokes}
+
+    except Exception as exc:
+        duration_ms = int((time.perf_counter() - start) * 1000)
+        await log.error(
+            "random_joke_failed",
+            "Failed to fetch random jokes from API Ninjas",
+            duration_ms=duration_ms,
+            exc=exc,
+        )
+        raise HTTPException(status_code=503, detail="Failed to fetch random jokes")
+
+
 @router.get("/joke-of-the-day")
 async def get_joke_of_the_day(db: AsyncSession = Depends(get_db)):
     """
