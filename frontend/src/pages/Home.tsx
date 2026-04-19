@@ -276,18 +276,13 @@ function RandomJokesBox() {
 
   return (
     <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-4 sm:p-6 space-y-3 sm:space-y-4 flex flex-col">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-xl sm:text-2xl">🎲</span>
-          <h3 className="text-base sm:text-lg font-bold text-white">Random Joke</h3>
-        </div>
-        <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-400 uppercase tracking-wide">
-          API Ninjas
-        </span>
+      <div className="flex items-center gap-2">
+        <span className="text-xl sm:text-2xl">🎲</span>
+        <h3 className="text-base sm:text-lg font-bold text-white">Random Joke</h3>
       </div>
 
       <p className="text-xs sm:text-sm text-zinc-400">
-        Pull a fresh joke from the API Ninjas vault — no AI, just pure human comedy.
+        Pull a fresh joke from our curated collection — no AI, just pure human comedy.
       </p>
 
       {/* Joke display */}
