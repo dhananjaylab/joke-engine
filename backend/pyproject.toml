@@ -1,0 +1,16 @@
+[tool.pytest.ini_options]
+asyncio_mode   = "auto"
+testpaths      = ["tests"]
+python_files   = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+# Show full assertion diffs and extra test summary on failure
+addopts = "-v --tb=short -q"
+
+[tool.coverage.run]
+source = ["routers", "services", "workers", "schemas", "core"]
+omit   = ["tests/*", "alembic/*", "*/__init__.py"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under   = 60
