@@ -1,4 +1,16 @@
-import { useState } from 'react'
+/**
+ * FIX Phase-3: Memory leak eliminated.
+ *
+ * BEFORE: `useState(() => new Audio())` created an HTMLAudioElement that
+ * was never cleaned up on unmount. Each row on the History page leaked one
+ * live audio element that could be actively buffering network data.
+ *
+ * AFTER:
+ *  - `useRef` holds the element (stable reference, no re-render on change).
+ *  - A `useEffect` cleanup pauses playback and clears `audio.src`, which
+ *    releases the network resource and unregisters all internal event listeners.
+ */
+import { useState, useRef, useEffect } from 'react'
 import { Button } from './ui/button'
 
 interface AudioPlayerProps {
@@ -7,24 +19,43 @@ interface AudioPlayerProps {
 
 export function AudioPlayer({ jokeId }: AudioPlayerProps) {
   const [playing, setPlaying] = useState(false)
-  const [audio] = useState(() => new Audio())
+
+  // FIX: useRef instead of useState — the element is stable across renders
+  const audioRef = useRef<HTMLAudioElement>(new Audio())
+
+  // FIX: cleanup on unmount — pauses and releases the network resource
+  useEffect(() => {
+    const audio = audioRef.current
+    return () => {
+      audio.pause()
+      audio.src = ''   // signals the browser to release buffered data
+    }
+  }, [])
 
   const togglePlay = async () => {
+    const audio = audioRef.current
+
     if (playing) {
       audio.pause()
       setPlaying(false)
     } else {
       audio.src = `/api/share/${jokeId}/audio`
       audio.onended = () => setPlaying(false)
-      await audio.play()
-      setPlaying(true)
+      audio.onerror = () => setPlaying(false)
+      try {
+        await audio.play()
+        setPlaying(true)
+      } catch {
+        // Autoplay blocked or network error — reset state silently
+        setPlaying(false)
+      }
     }
   }
 
   return (
-    <Button 
-      variant="outline" 
-      size="sm" 
+    <Button
+      variant="outline"
+      size="sm"
       onClick={togglePlay}
       className="bg-zinc-800/50 border-zinc-700 text-zinc-300 hover:bg-zinc-700 hover:text-white"
     >
