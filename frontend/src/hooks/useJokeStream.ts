@@ -47,8 +47,12 @@ export function useJokeStream({ onComplete, onError }: UseJokeStreamOptions = {}
       const params = new URLSearchParams({ query, style })
       if (length) params.append('length', length)
 
+      // Construct the full API URL using the environment variable
+      const apiUrl = import.meta.env.VITE_API_URL || ''
+      const streamUrl = `${apiUrl}/api/jokes/stream?${params}`
+
       try {
-        const res = await fetch(`/api/jokes/stream?${params}`, {
+        const res = await fetch(streamUrl, {
           signal: controller.signal,
           credentials: 'include',
         })
