@@ -5,7 +5,16 @@ from core.config import get_settings
 from core.logging import get_logger
 
 settings = get_settings()
-client = AsyncOpenAI(api_key=settings.openai_api_key)
+
+# FIX Phase-1: max_retries=3 lets the SDK handle transient 429/5xx with
+# exponential back-off + jitter at zero extra code cost.  timeout=30.0
+# prevents silent hangs during long streaming operations.
+client = AsyncOpenAI(
+    api_key=settings.openai_api_key,
+    max_retries=3,
+    timeout=30.0,
+)
+
 log = get_logger("services.ai")
 
 # Groq client for Reverse Heckler
@@ -13,7 +22,9 @@ groq_client = None
 if settings.groq_api_key:
     groq_client = AsyncOpenAI(
         api_key=settings.groq_api_key,
-        base_url="https://api.groq.com/openai/v1"
+        base_url="https://api.groq.com/openai/v1",
+        max_retries=3,
+        timeout=20.0,
     )
 
 PERSONAS: dict[str, str] = {
@@ -35,6 +46,10 @@ PERSONAS: dict[str, str] = {
         "Respond using ONLY emojis — no words or punctuation. "
         "Use 5 to 10 emojis to express a funny thought about the topic."
     ),
+    "observational": "You are an observational comedian. Find the absurdity in everyday situations.",
+    "dark": "You are a dark-humour comedian. Keep it edgy but not harmful.",
+    "gen-z": "You are a Gen-Z comedian. Use current slang and internet humour.",
+    "meme": "You are a meme comedian. Write jokes that would work as meme captions.",
 }
 
 LENGTH_INSTRUCTIONS: dict[str, str] = {
@@ -56,7 +71,7 @@ async def get_joke(query: str, style: str = "witty", length: str = "short") -> s
     """Single-shot joke generation. Returns full text."""
     instruction = get_instruction(style, length)
     max_tokens = {"one-liner": 50, "short": 150, "medium": 300, "long": 500, "epic": 800}.get(length, 150)
-    
+
     start = time.perf_counter()
     await log.info(
         "ai_joke_start",
@@ -105,7 +120,7 @@ async def stream_joke(query: str, style: str = "witty", length: str = "short"):
     """Async generator yielding SSE-formatted token chunks."""
     instruction = get_instruction(style, length)
     max_tokens = {"one-liner": 50, "short": 150, "medium": 300, "long": 500, "epic": 800}.get(length, 150)
-    
+
     start = time.perf_counter()
     token_count = 0
 
@@ -180,7 +195,6 @@ async def heckle(user_joke: str) -> str:
         await log.info(
             "ai_heckle_complete",
             f"Heckle generated in {duration_ms}ms via {provider}",
-            details={"provider": provider, "duration_ms": duration_ms},
             duration_ms=duration_ms,
         )
         return text
@@ -199,17 +213,13 @@ async def heckle(user_joke: str) -> str:
 async def structured_roast(joke_text: str, originality: float, timing: float, cleverness: float) -> dict:
     """Generate a structured roast with detailed breakdown using existing scores."""
     start = time.perf_counter()
-    await log.info(
-        "ai_structured_roast_start", 
-        "Structured roast request", 
-        details={
-            "preview": joke_text[:80],
-            "scores": {"originality": originality, "timing": timing, "cleverness": cleverness}
-        }
-    )
-    
     overall_score = round((originality + timing + cleverness) / 3, 1)
-    
+
+    await log.info(
+        "ai_structured_roast_start",
+        "Structured roast request",
+        details={"preview": joke_text[:80], "scores": {"originality": originality, "timing": timing, "cleverness": cleverness}},
+    )
     try:
         result = await client.chat.completions.create(
             model="gpt-4o-mini",
@@ -222,7 +232,7 @@ You are a brutally honest comedy critic. Analyze this joke and provide a structu
 
 The joke has already been scored:
 - Originality: {originality}/10
-- Timing: {timing}/10  
+- Timing: {timing}/10
 - Cleverness: {cleverness}/10
 - Overall: {overall_score}/10
 
@@ -234,34 +244,23 @@ Provide a JSON response with:
     "timing": {{"score": {timing}, "comment": "specific critique about timing/delivery"}},
     "cleverness": {{"score": {cleverness}, "comment": "specific critique about cleverness/wit"}}
   }},
-  "roast": "A witty, sarcastic overall roast of the joke that's funny but not cruel. Reference the scores."
+  "roast": "A witty, sarcastic overall roast of the joke that's funny but not cruel."
 }}
-
-Be funny, sarcastic, but constructive. Make the roast entertaining to read.
 """},
                 {"role": "user", "content": f"Joke to roast: {joke_text}"},
             ],
         )
-        
         roast_data = json.loads(result.choices[0].message.content)
         duration_ms = int((time.perf_counter() - start) * 1000)
-        
         await log.info(
             "ai_structured_roast_complete",
             f"Structured roast generated in {duration_ms}ms",
-            details={"overall_score": roast_data.get("overall_score")},
             duration_ms=duration_ms,
         )
         return roast_data
-        
     except Exception as exc:
         duration_ms = int((time.perf_counter() - start) * 1000)
-        await log.error(
-            "ai_structured_roast_failed",
-            "Structured roast generation failed",
-            duration_ms=duration_ms,
-            exc=exc,
-        )
+        await log.error("ai_structured_roast_failed", "Structured roast generation failed", duration_ms=duration_ms, exc=exc)
         raise
 
 
@@ -282,11 +281,7 @@ async def explain(joke_text: str) -> str:
         )
         text = result.choices[0].message.content.strip()
         duration_ms = int((time.perf_counter() - start) * 1000)
-        await log.info(
-            "ai_explain_complete",
-            f"Explanation generated in {duration_ms}ms",
-            duration_ms=duration_ms,
-        )
+        await log.info("ai_explain_complete", f"Explanation generated in {duration_ms}ms", duration_ms=duration_ms)
         return text
     except Exception as exc:
         duration_ms = int((time.perf_counter() - start) * 1000)
@@ -313,21 +308,11 @@ async def score_joke(joke_text: str) -> dict | None:
         )
         scores = json.loads(result.choices[0].message.content)
         duration_ms = int((time.perf_counter() - start) * 1000)
-        await log.info(
-            "ai_score_complete",
-            f"Joke scored in {duration_ms}ms: {scores}",
-            details={"scores": scores},
-            duration_ms=duration_ms,
-        )
+        await log.info("ai_score_complete", f"Joke scored in {duration_ms}ms: {scores}", details={"scores": scores}, duration_ms=duration_ms)
         return scores
     except Exception as exc:
         duration_ms = int((time.perf_counter() - start) * 1000)
-        await log.error(
-            "ai_score_failed",
-            "Joke scoring failed",
-            duration_ms=duration_ms,
-            exc=exc,
-        )
+        await log.error("ai_score_failed", "Joke scoring failed", duration_ms=duration_ms, exc=exc)
         return None
 
 
@@ -346,7 +331,6 @@ async def generate_audio(text: str) -> bytes:
         await log.info(
             "ai_tts_complete",
             f"TTS audio generated in {duration_ms}ms ({len(audio_bytes)} bytes)",
-            details={"bytes": len(audio_bytes), "text_length": len(text)},
             duration_ms=duration_ms,
         )
         return audio_bytes
@@ -360,16 +344,9 @@ async def embed_text(text: str) -> list[float]:
     """Generate text embedding for semantic dedup (Phase 6)."""
     start = time.perf_counter()
     try:
-        result = await client.embeddings.create(
-            model="text-embedding-3-small",
-            input=text,
-        )
+        result = await client.embeddings.create(model="text-embedding-3-small", input=text)
         duration_ms = int((time.perf_counter() - start) * 1000)
-        await log.debug(
-            "ai_embed_complete",
-            f"Embedding generated in {duration_ms}ms",
-            duration_ms=duration_ms,
-        )
+        await log.debug("ai_embed_complete", f"Embedding generated in {duration_ms}ms", duration_ms=duration_ms)
         return result.data[0].embedding
     except Exception as exc:
         duration_ms = int((time.perf_counter() - start) * 1000)
