@@ -4,9 +4,9 @@ import { Button } from './ui/button'
 interface StructuredRoastProps {
   jokeId: number
   jokeText: string
-  originality?: number
-  timing?: number
-  cleverness?: number
+  originality?: number | null
+  timing?: number | null
+  cleverness?: number | null
 }
 
 interface RoastData {
