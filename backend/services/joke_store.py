@@ -1,18 +1,13 @@
 """
-joke_store.py — central joke persistence service.
+Central joke persistence service — all fixes applied.
 
-Every joke that enters the system, regardless of origin, is saved through
-`save_joke()`.  This guarantees:
-  - A consistent DB record with source + session_key tracking
-  - Background AI scoring enqueued automatically
-  - Structured logging on every save
-
-Supported sources (see models/joke.py JOKE_SOURCES):
-    ai_generated       — POST /api/jokes/generate
-    ai_streamed        — GET  /api/jokes/stream  (SSE)
-    ai_websocket       — WS   /ws/joke
-    api_ninjas_random  — GET  /api/jokes/random
-    api_ninjas_daily   — GET  /api/jokes/joke-of-the-day  (mirror copy)
+FIXES:
+  Phase-2a: Singleton ARQ pool — no longer creates a new pool per job.
+  Phase-2b: Removed redundant db.refresh() after db.flush().
+  Phase-2c: Normalise query to lowercase at write time so cache lookups
+            can use a plain equality check and hit the ix_jokes_query index.
+  Phase-3:  Added auto_commit parameter so callers can wrap the joke save
+            and follow-up mutations (e.g. XP update) in a single transaction.
 """
 from __future__ import annotations
 
@@ -36,35 +31,44 @@ async def save_joke(
     source: str,
     session_key: Optional[str] = None,
     enqueue_scoring: bool = True,
+    auto_commit: bool = True,          # FIX Phase-3: caller controls transaction
 ) -> Joke:
     """
-    Persist a joke to Neon PostgreSQL and optionally enqueue AI scoring.
+    Persist a joke to PostgreSQL and optionally enqueue AI scoring.
 
     Parameters
     ----------
     db            : active async DB session
-    query         : the topic / prompt string (will be stored as-is)
+    query         : the topic / prompt string — stored lower-cased (Phase-2c)
     response      : the joke text
-    source        : one of JOKE_SOURCES — identifies the origin pipeline
-    session_key   : user session UUID (nullable for system-generated jokes)
-    enqueue_scoring: whether to kick off background AI scoring (default True)
+    source        : one of JOKE_SOURCES
+    session_key   : user session UUID (nullable)
+    enqueue_scoring: whether to kick off background AI scoring
+    auto_commit   : if False the caller is responsible for committing, allowing
+                    joke + follow-up mutations to land in a single transaction
 
     Returns
     -------
-    The persisted Joke ORM instance (id is populated after flush).
+    The persisted Joke ORM instance (id populated after flush).
     """
     start = time.perf_counter()
 
+    # FIX Phase-2c: normalise once at write time so cache lookups can use
+    # plain equality and hit the index instead of calling func.lower().
+    normalised_query = query.lower().strip()
+
     joke = Joke(
-        query=query,
+        query=normalised_query,
         response=response,
         source=source,
         session_key=session_key,
     )
     db.add(joke)
-    await db.flush()       # populate joke.id without committing
-    await db.refresh(joke)
-    await db.commit()
+    await db.flush()          # FIX Phase-2b: flush populates joke.id
+    # refresh() REMOVED — it was an extra SELECT with no benefit here
+
+    if auto_commit:
+        await db.commit()
 
     duration_ms = int((time.perf_counter() - start) * 1000)
     await log.info(
@@ -75,8 +79,9 @@ async def save_joke(
         duration_ms=duration_ms,
         details={
             "source": source,
-            "query": query[:80],
+            "query": normalised_query[:80],
             "response_length": len(response),
+            "auto_commit": auto_commit,
         },
     )
 
@@ -87,21 +92,17 @@ async def save_joke(
 
 
 # ---------------------------------------------------------------------------
-# Internal — scoring enqueue (mirrors routers/jokes.py but lives here so
-# every caller gets it for free without importing the router)
+# Internal — scoring enqueue (singleton pool, Phase-2a)
 # ---------------------------------------------------------------------------
 
 async def _enqueue_score(joke_id: int) -> None:
-    from arq import create_pool
-    from arq.connections import RedisSettings
-    from core.config import get_settings
+    # FIX Phase-2a: use the singleton pool instead of creating one per job.
+    from workers.redis_client import get_arq_pool
     from workers.fallback import score_joke_sync
 
-    settings = get_settings()
     try:
-        pool = await create_pool(RedisSettings.from_dsn(settings.redis_url))
+        pool = await get_arq_pool()
         await pool.enqueue_job("task_score_joke", joke_id)
-        await pool.close(close_connection_pool=True)
         await log.info(
             "score_enqueued",
             f"Scoring task enqueued for joke {joke_id}",
