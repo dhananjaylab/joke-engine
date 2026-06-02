@@ -11,7 +11,7 @@
  *  ✓ Buffer cleared:       restarting a stream resets previous accumulation
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach, type MockedFunction } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useJokeStream } from '../hooks/useJokeStream'
 import { flushRaf, _rafQueue } from './setup'
