@@ -1,18 +1,42 @@
+"""
+FastAPI application entry-point — all phases applied.
+
+FIXES:
+  Phase-3a: slowapi rate limiter wired up (10 req/min on AI endpoints).
+  Phase-3b: Deep health check probes DB + Redis and returns 503 on failure.
+  Phase-3c: APScheduler shutdown passes wait=True to drain in-flight jobs.
+  Phase-3d: ARQ singleton pool is closed gracefully on shutdown.
+  Phase-4:  Redis cache client closed on shutdown.
+"""
 from contextlib import asynccontextmanager
 import os
 import time
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
+from sqlalchemy import text
 
 from core.config import get_settings
-from core.database import engine, Base
+from core.database import engine, Base, get_db
 from core.logging import setup_logging, start_db_log_flush, stop_db_log_flush, get_logger
 from routers import jokes, share, gamify, battle, challenge, ws, heckle, logs
 from middleware.session import SessionMiddleware
 
+# FIX Phase-3a: import slowapi components
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
 settings = get_settings()
 log = get_logger("main")
+
+# ── Rate limiter (shared across routers via app.state) ────────────────────────
+limiter = Limiter(
+    key_func=get_remote_address,
+    storage_uri=settings.redis_url,   # backed by existing Redis instance
+    default_limits=["200/minute"],    # global safety net
+)
 
 
 @asynccontextmanager
@@ -32,7 +56,6 @@ async def lifespan(app: FastAPI):
         },
     )
 
-    # Create tables + media dir
     try:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
@@ -44,9 +67,7 @@ async def lifespan(app: FastAPI):
     if not settings.use_cloud_storage:
         os.makedirs(settings.media_dir, exist_ok=True)
         os.makedirs(os.path.join(settings.media_dir, "audio"), exist_ok=True)
-        await log.info("media_dir_ready", f"Local media directory ready: {settings.media_dir}")
 
-    # Start APScheduler
     try:
         from tasks.scheduler import scheduler
         scheduler.start()
@@ -61,16 +82,30 @@ async def lifespan(app: FastAPI):
     # ── Shutdown ─────────────────────────────────────────────────────────────
     await log.info("app_shutdown", f"Shutting down {settings.app_name}")
 
+    # FIX Phase-3c: wait=True drains in-flight scheduled jobs before exit
     try:
         from tasks.scheduler import scheduler
-        scheduler.shutdown()
-        await log.info("scheduler_stopped", "APScheduler stopped")
+        scheduler.shutdown(wait=True)
+        await log.info("scheduler_stopped", "APScheduler stopped (drained)")
     except Exception as exc:
         await log.warning("scheduler_stop_failed", "APScheduler shutdown error", exc=exc)
 
+    # FIX Phase-3d: close the singleton ARQ pool
+    try:
+        from workers.redis_client import close_arq_pool
+        await close_arq_pool()
+    except Exception as exc:
+        await log.warning("arq_pool_close_failed", "ARQ pool close error", exc=exc)
+
+    # FIX Phase-4: close Redis cache client
+    try:
+        from services.cache import close_cache
+        await close_cache()
+    except Exception as exc:
+        await log.warning("cache_close_failed", "Cache Redis close error", exc=exc)
+
     await engine.dispose()
     await log.info("db_engine_disposed", "Database engine disposed")
-
     stop_db_log_flush()
 
 
@@ -79,6 +114,10 @@ app = FastAPI(
     debug=settings.debug,
     lifespan=lifespan,
 )
+
+# FIX Phase-3a: attach limiter to app state and register the 429 handler
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ── CORS ─────────────────────────────────────────────────────────────────────
 app.add_middleware(
@@ -92,50 +131,46 @@ app.add_middleware(
 # ── Session cookie middleware ─────────────────────────────────────────────────
 app.add_middleware(SessionMiddleware, secret_key=settings.secret_key)
 
+
 # ── Request / response timing middleware ─────────────────────────────────────
 @app.middleware("http")
 async def request_logging_middleware(request: Request, call_next):
     start = time.perf_counter()
-    response = None
     try:
         response = await call_next(request)
         duration_ms = int((time.perf_counter() - start) * 1000)
-        level = "WARNING" if response.status_code >= 400 else "INFO"
-        await log.info(
-            "http_request",
-            f"{request.method} {request.url.path} → {response.status_code}",
-            details={
-                "method": request.method,
-                "path": request.url.path,
-                "query": str(request.url.query) or None,
-                "status_code": response.status_code,
-                "client_ip": request.client.host if request.client else None,
-            },
-            duration_ms=duration_ms,
-        ) if level == "INFO" else await log.warning(
-            "http_error_response",
-            f"{request.method} {request.url.path} → {response.status_code}",
-            details={
-                "method": request.method,
-                "path": request.url.path,
-                "status_code": response.status_code,
-            },
-            duration_ms=duration_ms,
-        )
+        if response.status_code >= 400:
+            await log.warning(
+                "http_error_response",
+                f"{request.method} {request.url.path} → {response.status_code}",
+                details={"method": request.method, "path": request.url.path, "status_code": response.status_code},
+                duration_ms=duration_ms,
+            )
+        else:
+            await log.info(
+                "http_request",
+                f"{request.method} {request.url.path} → {response.status_code}",
+                details={
+                    "method": request.method,
+                    "path": request.url.path,
+                    "status_code": response.status_code,
+                    "client_ip": request.client.host if request.client else None,
+                },
+                duration_ms=duration_ms,
+            )
         return response
     except Exception as exc:
         duration_ms = int((time.perf_counter() - start) * 1000)
         await log.error(
             "http_unhandled_exception",
             f"Unhandled exception on {request.method} {request.url.path}",
-            details={"method": request.method, "path": request.url.path},
             duration_ms=duration_ms,
             exc=exc,
         )
         raise
 
 
-# ── Static media (local storage only) ────────────────────────────────────────
+# ── Static media ──────────────────────────────────────────────────────────────
 if not settings.use_cloud_storage:
     app.mount("/media", StaticFiles(directory=settings.media_dir), name="media")
 
@@ -150,7 +185,37 @@ app.include_router(heckle.router)
 app.include_router(logs.router)
 
 
+# ── Health — FIX Phase-3b: deep probes, returns 503 when deps are down ───────
 @app.get("/api/health")
 async def health():
-    await log.debug("health_check", "Health check endpoint called")
-    return {"status": "ok", "app": settings.app_name}
+    """
+    Deep health check: probes the DB and Redis in addition to app liveness.
+    Returns 200 {"status":"ok"} when all deps are healthy.
+    Returns 503 {"status":"degraded",...} when any dep is unreachable.
+    """
+    checks: dict[str, str] = {}
+
+    # DB probe
+    try:
+        from core.database import AsyncSessionLocal
+        async with AsyncSessionLocal() as session:
+            await session.execute(text("SELECT 1"))
+        checks["db"] = "ok"
+    except Exception:
+        checks["db"] = "error"
+
+    # Redis probe
+    try:
+        import redis.asyncio as aioredis
+        r = aioredis.from_url(settings.redis_url, socket_connect_timeout=2)
+        await r.ping()
+        await r.aclose()
+        checks["redis"] = "ok"
+    except Exception:
+        checks["redis"] = "error"
+
+    all_ok = all(v == "ok" for v in checks.values())
+    return JSONResponse(
+        content={"status": "ok" if all_ok else "degraded", **checks},
+        status_code=200 if all_ok else 503,
+    )
