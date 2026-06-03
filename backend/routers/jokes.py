@@ -122,10 +122,13 @@ async def stream_joke_sse(
 
         try:
             async for chunk in ai.stream_joke(query, style, length):
+                if chunk.strip() == "data: [DONE]":
+                    break
                 tokens.append(chunk)
                 yield chunk
         except Exception as exc:
             await log.error("joke_stream_error", "SSE stream error", details={"query": query}, exc=exc)
+            yield "data: [ERROR:AI service is temporarily unavailable]\n\n"
             return
 
         full_text = (
@@ -135,7 +138,12 @@ async def stream_joke_sse(
             .replace("[DONE]", "")
             .strip()
         )
-        if full_text:
+        if not full_text:
+            await log.warning("joke_stream_empty", "SSE stream completed with no joke text", details={"query": query})
+            yield "data: [ERROR:No joke was generated]\n\n"
+            return
+
+        try:
             composite = f"{query.strip()} [{style}] [{length}]".lower()
             new_joke = await save_joke(db, query=composite, response=full_text, source="ai_streamed")
             duration_ms = int((time.perf_counter() - start) * 1000)
@@ -146,6 +154,10 @@ async def stream_joke_sse(
                 duration_ms=duration_ms,
             )
             yield f"data: [JOKE_ID:{new_joke.id}]\n\n"
+            yield "data: [DONE]\n\n"
+        except Exception as exc:
+            await log.error("joke_stream_save_error", "Failed to save streamed joke", details={"query": query}, exc=exc)
+            yield "data: [ERROR:Generated joke could not be saved]\n\n"
 
     return StreamingResponse(
         event_generator(),

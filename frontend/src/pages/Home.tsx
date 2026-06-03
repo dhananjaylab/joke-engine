@@ -25,6 +25,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { jokeApi } from '@/api/jokes'
 import type { JokeResponse } from '@/api/jokes'
+import { toast } from 'sonner'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FIX: Module-scope components — stable identity, no remount on Home re-render
@@ -232,6 +233,7 @@ export default function Home() {
   const [jokeOfTheDay, setJotd]     = useState<string | null>(null)
   const [jotdLoading, setJotdLoading] = useState(true)
   const [completedJokeId, setCompletedJokeId] = useState<number | null>(null)
+  const [generateError, setGenerateError] = useState<string | null>(null)
 
   const { currentStyle, setStyle, streamingTokens, clearStream, setJoke } = useJokeStore()
   const { fetch: fetchProfile } = useProfileStore()
@@ -257,12 +259,18 @@ export default function Home() {
 
   const sseStream = useJokeStream({
     onComplete: (joke, id) => {
+      setGenerateError(null)
       triggerConfetti(currentStyle)
       fetchProfile()
       if (id) {
         setJoke(joke, id)
         setCompletedJokeId(id)
       }
+    },
+    onError: (err) => {
+      const message = err.message || 'Could not generate a joke. Please try again.'
+      setGenerateError(message)
+      toast.error(message)
     },
   })
 
@@ -272,6 +280,7 @@ export default function Home() {
     const finalLength = lengthText ?? jokeLength
     if (!finalQuery) return
     clearStream()
+    setGenerateError(null)
     setCompletedJokeId(null)
     sseStream.startStream(finalQuery, finalStyle, finalLength)
   }
@@ -355,6 +364,11 @@ export default function Home() {
             ? <span className="animate-pulse">Generating...</span>
             : 'GENERATE ⚡'}
         </Button>
+        {generateError && (
+          <p className="text-sm text-red-400 text-center" role="alert">
+            {generateError}
+          </p>
+        )}
       </div>
 
       {/* Trending topics */}

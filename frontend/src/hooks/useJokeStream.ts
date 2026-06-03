@@ -63,45 +63,75 @@ export function useJokeStream({ onComplete, onError }: UseJokeStreamOptions = {}
         const reader = res.body.getReader()
         const decoder = new TextDecoder()
         let jokeId: number | undefined
+        let completed = false
+        let pendingLine = ''
+        let stopReading = false
+
+        const flushComplete = () => {
+          if (rafRef.current !== undefined) {
+            cancelAnimationFrame(rafRef.current)
+            rafRef.current = undefined
+          }
+          const full = bufRef.current.join('')
+          setStreamingTokens(full)
+          completed = true
+          onComplete?.(full, jokeId)
+        }
+
+        const processLine = (line: string) => {
+          if (!line.startsWith('data:')) return
+
+          const token = line.startsWith('data: ') ? line.slice(6) : line.slice(5)
+
+          if (token === '[DONE]') {
+            flushComplete()
+            stopReading = true
+            return
+          }
+
+          if (token.startsWith('[ERROR:')) {
+            const message = token.slice(7, token.endsWith(']') ? -1 : undefined)
+            throw new Error(message || 'Joke generation failed')
+          }
+
+          if (token.startsWith('[JOKE_ID:')) {
+            const match = /\[JOKE_ID:(\d+)\]/.exec(token)
+            if (match) jokeId = parseInt(match[1], 10)
+            return
+          }
+
+          // FIX: append to ref, batch the state update via rAF
+          bufRef.current.push(token)
+          if (rafRef.current !== undefined) {
+            cancelAnimationFrame(rafRef.current)
+          }
+          rafRef.current = requestAnimationFrame(() => {
+            setStreamingTokens(bufRef.current.join(''))
+            rafRef.current = undefined
+          })
+        }
 
         while (true) {
           const { done, value } = await reader.read()
           if (done) break
 
-          const text = decoder.decode(value, { stream: true })
-          for (const line of text.split('\n')) {
-            if (!line.startsWith('data: ')) continue
+          const text = pendingLine + decoder.decode(value, { stream: true })
+          const lines = text.split(/\r?\n/)
+          pendingLine = lines.pop() ?? ''
 
-            const token = line.slice(6)
-
-            if (token === '[DONE]') {
-              // Flush any remaining buffered tokens immediately on completion
-              if (rafRef.current !== undefined) {
-                cancelAnimationFrame(rafRef.current)
-                rafRef.current = undefined
-              }
-              const full = bufRef.current.join('')
-              setStreamingTokens(full)
-              onComplete?.(full, jokeId)
-              break
-            }
-
-            if (token.startsWith('[JOKE_ID:')) {
-              const match = /\[JOKE_ID:(\d+)\]/.exec(token)
-              if (match) jokeId = parseInt(match[1], 10)
-              continue
-            }
-
-            // FIX: append to ref, batch the state update via rAF
-            bufRef.current.push(token)
-            if (rafRef.current !== undefined) {
-              cancelAnimationFrame(rafRef.current)
-            }
-            rafRef.current = requestAnimationFrame(() => {
-              setStreamingTokens(bufRef.current.join(''))
-              rafRef.current = undefined
-            })
+          for (const line of lines) {
+            processLine(line)
+            if (stopReading) break
           }
+          if (stopReading) break
+        }
+
+        if (!completed && pendingLine) {
+          processLine(pendingLine)
+        }
+
+        if (!completed && !controller.signal.aborted) {
+          throw new Error('Joke generation stopped before it finished')
         }
       } catch (err) {
         if ((err as Error).name !== 'AbortError') {
