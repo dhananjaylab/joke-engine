@@ -128,9 +128,10 @@ describe('rAF token batching (Phase-2)', () => {
 
     const { result } = renderHook(() => useJokeStream({}))
 
-    // Start stream but don't await — it's still reading
-    const streamPromise = act(async () => {
-      result.current.startStream('cats', 'witty')
+    // Start stream but keep the promise so the pending work can be awaited later.
+    let streamPromise!: Promise<void>
+    act(() => {
+      streamPromise = result.current.startStream('cats', 'witty')
     })
 
     // Give the first chunk time to be processed
@@ -142,7 +143,9 @@ describe('rAF token batching (Phase-2)', () => {
 
     // Resume the stream to completion
     resolveSecondChunk()
-    await streamPromise
+    await act(async () => {
+      await streamPromise
+    })
 
     // Final [DONE] update
     const lastCall = mockSetStreamingTokens.mock.calls.at(-1)![0]
