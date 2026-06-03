@@ -12,15 +12,19 @@ import { vi } from 'vitest'
 export const _rafQueue: Map<number, FrameRequestCallback> = new Map()
 let _rafId = 0
 
-vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback): number => {
-  const id = ++_rafId
-  _rafQueue.set(id, cb)
-  return id
-})
+export function installRafMock(): void {
+  vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback): number => {
+    const id = ++_rafId
+    _rafQueue.set(id, cb)
+    return id
+  })
 
-vi.stubGlobal('cancelAnimationFrame', (id: number): void => {
-  _rafQueue.delete(id)
-})
+  vi.stubGlobal('cancelAnimationFrame', (id: number): void => {
+    _rafQueue.delete(id)
+  })
+}
+
+installRafMock()
 
 /** Flush all pending rAF callbacks in queue order. */
 export function flushRaf(): void {

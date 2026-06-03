@@ -14,7 +14,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
 import { useJokeStream } from '../hooks/useJokeStream'
-import { flushRaf, _rafQueue } from './setup'
+import { flushRaf, installRafMock, _rafQueue } from './setup'
 
 // ── Store mock ────────────────────────────────────────────────────────────────
 const mockSetStreamingTokens = vi.fn()
@@ -59,6 +59,7 @@ function buildSseLines(tokens: string[], jokeId?: number): string[] {
 
 beforeEach(() => {
   vi.restoreAllMocks()
+  installRafMock()
   mockSetStreamingTokens.mockClear()
   mockClearStream.mockClear()
 })
