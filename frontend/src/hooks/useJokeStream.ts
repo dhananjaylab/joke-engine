@@ -79,6 +79,7 @@ export function useJokeStream({ onComplete, onError }: UseJokeStreamOptions = {}
         }
 
         const processLine = (line: string) => {
+          if (controller.signal.aborted) return
           if (!line.startsWith('data:')) return
 
           const token = line.startsWith('data: ') ? line.slice(6) : line.slice(5)
@@ -114,6 +115,7 @@ export function useJokeStream({ onComplete, onError }: UseJokeStreamOptions = {}
         while (true) {
           const { done, value } = await reader.read()
           if (done) break
+          if (controller.signal.aborted) break
 
           const text = pendingLine + decoder.decode(value, { stream: true })
           const lines = text.split(/\r?\n/)

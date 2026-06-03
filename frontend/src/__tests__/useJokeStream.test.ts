@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { renderHook, act } from '@testing-library/react'
+import { renderHook, act, waitFor } from '@testing-library/react'
 import { useJokeStream } from '../hooks/useJokeStream'
 import { flushRaf, _rafQueue } from './setup'
 
@@ -137,6 +137,7 @@ describe('rAF token batching (Phase-2)', () => {
     // Give the first chunk time to be processed
     await new Promise(r => setTimeout(r, 10))
 
+    await waitFor(() => expect(_rafQueue.size).toBeGreaterThan(0))
     // Flush rAF — should update state with partial text
     flushRaf()
     expect(mockSetStreamingTokens).toHaveBeenCalledWith(partialTokens.join(''))
