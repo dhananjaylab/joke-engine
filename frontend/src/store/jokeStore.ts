@@ -17,7 +17,7 @@ export const useJokeStore = create<JokeStore>()((set) => ({
   currentJokeId: null,
   currentStyle: 'witty',
   streamingTokens: '',
-  setJoke: (joke, id) => set({ currentJoke: joke, currentJokeId: id, streamingTokens: '' }),
+  setJoke: (joke, id) => set({ currentJoke: joke, currentJokeId: id }),
   setStyle: (style) => set({ currentStyle: style }),
   setStreamingTokens: (t) => set({ streamingTokens: t }),
   appendToken: (token) => set((s) => ({ streamingTokens: s.streamingTokens + token })),
