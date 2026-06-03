@@ -233,6 +233,7 @@ export default function Home() {
   const [jokeOfTheDay, setJotd]     = useState<string | null>(null)
   const [jotdLoading, setJotdLoading] = useState(true)
   const [completedJokeId, setCompletedJokeId] = useState<number | null>(null)
+  const [completedJoke, setCompletedJoke] = useState('')
   const [generateError, setGenerateError] = useState<string | null>(null)
 
   const { currentStyle, setStyle, streamingTokens, clearStream, setJoke } = useJokeStore()
@@ -260,6 +261,7 @@ export default function Home() {
   const sseStream = useJokeStream({
     onComplete: (joke, id) => {
       setGenerateError(null)
+      setCompletedJoke(joke)
       triggerConfetti(currentStyle)
       fetchProfile()
       if (id) {
@@ -282,8 +284,11 @@ export default function Home() {
     clearStream()
     setGenerateError(null)
     setCompletedJokeId(null)
+    setCompletedJoke('')
     sseStream.startStream(finalQuery, finalStyle, finalLength)
   }
+
+  const resultText = streamingTokens || completedJoke
 
   return (
     <div className="space-y-6 sm:space-y-8 max-w-3xl mx-auto">
@@ -380,20 +385,20 @@ export default function Home() {
       </div>
 
       {/* Streaming result */}
-      {(sseStream.streaming || streamingTokens) && (
+      {(sseStream.streaming || resultText) && (
         <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-4 sm:p-6 min-h-[100px] sm:min-h-[120px] space-y-4">
           <p className="text-white text-base sm:text-lg leading-relaxed">
-            {streamingTokens}
+            {resultText}
             {sseStream.streaming && <span className="animate-pulse ml-1">▍</span>}
           </p>
 
-          {!sseStream.streaming && streamingTokens && streamingTokens.trim().length > 10 && (
+          {!sseStream.streaming && resultText && resultText.trim().length > 10 && (
             <div className="border-t border-zinc-800 pt-4 space-y-4">
-              <VoicePlayer text={streamingTokens} jokeStyle={currentStyle} />
+              <VoicePlayer text={resultText} jokeStyle={currentStyle} />
               {completedJokeId && (
                 <StructuredRoast
                   jokeId={completedJokeId}
-                  jokeText={streamingTokens}
+                  jokeText={resultText}
                 />
               )}
             </div>
