@@ -5,7 +5,6 @@ import os
 import hashlib
 import time
 from typing import Optional
-from io import BytesIO
 
 from core.config import get_settings
 from core.logging import get_logger

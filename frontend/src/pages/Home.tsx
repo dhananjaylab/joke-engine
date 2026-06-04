@@ -239,6 +239,12 @@ export default function Home() {
   const { currentStyle, setStyle, streamingTokens, clearStream, setJoke } = useJokeStore()
   const { fetch: fetchProfile } = useProfileStore()
 
+  useEffect(() => {
+    if (streamingTokens) {
+      setCompletedJoke(streamingTokens)
+    }
+  }, [streamingTokens])
+
   // Handle navigation state from navbar quick-search
   useEffect(() => {
     if (location.state?.query) {

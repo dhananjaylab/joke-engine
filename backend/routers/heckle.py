@@ -1,7 +1,3 @@
-"""
-FIX Phase-3: Rate limiting added to both heckle endpoints.
-Both call OpenAI/Groq and are equally exposed to unbounded spend.
-"""
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 from services import ai

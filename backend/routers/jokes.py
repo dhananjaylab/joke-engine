@@ -5,12 +5,10 @@ FIXES:
   Phase-1:  Style Literal validation via updated GenerateRequest schema.
   Phase-2:  Cache lookup uses plain equality (query already lower-cased at write).
   Phase-3a: generate_joke wraps joke save + XP update in a single transaction.
-  Phase-3b: Rate limiting via slowapi on AI-backed endpoints.
   Phase-3c: Typed error responses via AppError schema.
   Phase-4:  Keyset (cursor-based) pagination replaces OFFSET pagination.
 """
 import time
-import asyncio
 
 import httpx
 from fastapi import APIRouter, Depends, Query, Request
@@ -40,7 +38,7 @@ _JOKE_NOT_FOUND = "Joke not found"
 
 @router.post("/generate", response_model=JokeResponse)
 async def generate_joke(
-    request: Request,                          # required by slowapi
+    request: Request,
     body: GenerateRequest,
     db: AsyncSession = Depends(get_db),
     profile: UserProfile = Depends(get_profile),

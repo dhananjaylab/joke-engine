@@ -36,16 +36,7 @@ export interface PaginatedJokes {
   pages: number
 }
 
-export interface GenerateRequest {
-  query: string
-  style: string
-  regenerate?: boolean
-}
-
 export const jokeApi = {
-  generate: (body: GenerateRequest) =>
-    api.post<JokeResponse>('/api/jokes/generate', body).then(r => r.data),
-
   /**
    * FIX Phase-4: cursor-based history.
    * Pass cursor = undefined for the first page.
@@ -64,12 +55,6 @@ export const jokeApi = {
 
   delete: (id: number) =>
     api.delete(`/api/jokes/${id}`),
-
-  heckle: (joke: string) =>
-    api.post<{ roast: string }>('/api/heckle', { joke }).then(r => r.data),
-
-  explain: (id: number) =>
-    api.post<{ explanation: string }>(`/api/jokes/${id}/explain`).then(r => r.data),
 
   incrementShare: (id: number) =>
     api.post(`/api/share/${id}/increment`),

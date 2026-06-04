@@ -181,8 +181,9 @@ joke-engine/
 - `GET /api/jokes/history` - Paginated joke history
 - `GET /api/jokes/{id}` - Get specific joke
 - `DELETE /api/jokes/{id}` - Delete joke
-- `POST /api/jokes/{id}/heckle` - Get AI roast
+- `POST /api/jokes/{id}/structured-roast` - Get structured AI roast
 - `POST /api/jokes/{id}/explain` - Get explanation
+- `POST /api/structured-heckle` - Score and roast a user-submitted joke
 
 ### Share
 - `GET /api/share/{id}/card.png` - Download joke card
@@ -464,7 +465,6 @@ Access at: **http://localhost**
 
 This is a complete, production-ready codebase. Feel free to:
 - Add new joke personas
-- Implement battle system
 - Add trending topics
 - Create custom UI components
 - Improve scoring algorithm

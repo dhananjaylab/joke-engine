@@ -22,7 +22,6 @@ from models.daily_joke import DailyJoke
 from core.config import get_settings
 from core.logging import get_logger
 from services.cache import cache_get, cache_set
-from services import ai as ai_service
 
 settings = get_settings()
 log = get_logger("services.daily_joke")
