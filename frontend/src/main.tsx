@@ -7,8 +7,6 @@ import './index.css'
 
 const Home = React.lazy(() => import('./pages/Home'))
 const History = React.lazy(() => import('./pages/History'))
-const Battle = React.lazy(() => import('./pages/Battle'))
-const Heckle = React.lazy(() => import('./pages/Heckle'))
 const JokeDetail = React.lazy(() => import('./pages/JokeDetail'))
 const Profile = React.lazy(() => import('./pages/Profile'))
 const Random = React.lazy(() => import('./pages/Random'))
@@ -46,22 +44,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
               element={
                 <React.Suspense fallback={null}>
                   <Random />
-                </React.Suspense>
-              }
-            />
-            <Route
-              path="battle"
-              element={
-                <React.Suspense fallback={null}>
-                  <Battle />
-                </React.Suspense>
-              }
-            />
-            <Route
-              path="heckle"
-              element={
-                <React.Suspense fallback={null}>
-                  <Heckle />
                 </React.Suspense>
               }
             />

@@ -33,9 +33,6 @@ apscheduler>=3.10.0
 # Caching / queuing
 redis>=5.0.0
 
-# FIX Phase-3a: rate limiting
-slowapi>=0.1.9
-
 # Trends
 newsapi-python>=0.2.7
 
