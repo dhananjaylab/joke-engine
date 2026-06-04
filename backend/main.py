@@ -1,12 +1,5 @@
 """
-FastAPI application entry-point — all phases applied.
-
-FIXES:
-  Phase-3a: slowapi rate limiter wired up (10 req/min on AI endpoints).
-  Phase-3b: Deep health check probes DB + Redis and returns 503 on failure.
-  Phase-3c: APScheduler shutdown passes wait=True to drain in-flight jobs.
-  Phase-3d: ARQ singleton pool is closed gracefully on shutdown.
-  Phase-4:  Redis cache client closed on shutdown.
+FastAPI application entry-point.
 """
 from contextlib import asynccontextmanager
 import os
@@ -15,28 +8,17 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
+import redis.asyncio as aioredis
 from sqlalchemy import text
 
 from core.config import get_settings
-from core.database import engine, Base, get_db
+from core.database import engine, Base
 from core.logging import setup_logging, start_db_log_flush, stop_db_log_flush, get_logger
-from routers import jokes, share, gamify, battle, challenge, ws, heckle, logs
+from routers import jokes, share, gamify, ws, heckle, logs
 from middleware.session import SessionMiddleware
-
-# FIX Phase-3a: import slowapi components
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
 
 settings = get_settings()
 log = get_logger("main")
-
-# ── Rate limiter (shared across routers via app.state) ────────────────────────
-limiter = Limiter(
-    key_func=get_remote_address,
-    storage_uri=settings.redis_url,   # backed by existing Redis instance
-    default_limits=["200/minute"],    # global safety net
-)
 
 
 @asynccontextmanager
@@ -115,10 +97,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# FIX Phase-3a: attach limiter to app state and register the 429 handler
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-
 # ── CORS ─────────────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
@@ -178,8 +156,6 @@ if not settings.use_cloud_storage:
 app.include_router(jokes.router)
 app.include_router(share.router)
 app.include_router(gamify.router)
-app.include_router(battle.router)
-app.include_router(challenge.router)
 app.include_router(ws.router)
 app.include_router(heckle.router)
 app.include_router(logs.router)
@@ -206,7 +182,6 @@ async def health():
 
     # Redis probe
     try:
-        import redis.asyncio as aioredis
         r = aioredis.from_url(settings.redis_url, socket_connect_timeout=2)
         await r.ping()
         await r.aclose()
